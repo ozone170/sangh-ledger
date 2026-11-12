@@ -1,0 +1,25 @@
+# ProGuard/R8 Rules for Sangh Ledger
+
+# Preserve SQLCipher native JNI bindings and database classes
+-keep class net.sqlcipher.** { *; }
+-keep class net.sqlcipher.database.** { *; }
+-dontwarn net.sqlcipher.**
+
+# Preserve Flutter engine & plugin bindings
+-keep class io.flutter.app.** { *; }
+-keep class io.flutter.plugin.** { *; }
+-keep class io.flutter.util.** { *; }
+-keep class io.flutter.view.** { *; }
+-keep class io.flutter.** { *; }
+-keep class io.flutter.plugins.** { *; }
+
+# Cryptography & Local Auth
+-keep class androidx.biometric.** { *; }
+-dontwarn androidx.biometric.**
+
+# Strip all sensitive debug logs from release APK
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}
