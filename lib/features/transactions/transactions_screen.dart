@@ -9,6 +9,7 @@ import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/pdf_receipt_service.dart';
+import '../../domain/services/receipt_sharing_service.dart';
 import '../../l10n/app_localizations.dart';
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
@@ -135,9 +136,30 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             Row(
               children: [
                 Expanded(
-                  child: SecondaryButton(
-                    text: 'Print Receipt (PDF)',
-                    icon: Icons.print,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.share),
+                    label: const Text('Share Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      ReceiptSharingService.showShareOptionsModal(
+                        context,
+                        transaction: tx,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.print),
+                    label: const Text('Print (PDF)'),
                     onPressed: () async {
                       await PdfReceiptService.printReceipt(
                         sanghName: 'Sangh Ledger',
@@ -147,19 +169,17 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     },
                   ),
                 ),
-                if (!tx.isReversed) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: PrimaryButton(
-                      text: l10n.reversal,
-                      icon: Icons.undo,
-                      backgroundColor: AppColors.errorCrimson,
-                      onPressed: () => _promptReversal(context, tx),
-                    ),
-                  ),
-                ],
               ],
             ),
+            if (!tx.isReversed) ...[
+              const SizedBox(height: 12),
+              PrimaryButton(
+                text: l10n.reversal,
+                icon: Icons.undo,
+                backgroundColor: AppColors.errorCrimson,
+                onPressed: () => _promptReversal(context, tx),
+              ),
+            ],
           ],
         ),
       ),

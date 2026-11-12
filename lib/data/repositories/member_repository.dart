@@ -55,9 +55,8 @@ class MemberRepository {
     final now = DateTime.now();
 
     return await db.transaction<Member>((txn) async {
-      // Fetch organization id
-      final orgResults = await txn.query('organizations', limit: 1);
-      final orgId = orgResults.isNotEmpty ? orgResults.first['id'] as String : 'org_default';
+      // Dynamically fetch or seed valid organization id
+      final orgId = await _db.getActiveOrganizationId(txn);
 
       if (isActive) {
         final activeCount = await getActiveMembersCount(txn);

@@ -8,6 +8,8 @@ import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/receipt_sharing_service.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../l10n/app_localizations.dart';
 import 'loans_screen.dart';
 
@@ -387,13 +389,43 @@ class LoanDetailScreen extends ConsumerWidget {
                         subtitle: Text(
                           '${rep.paymentDate.toIso8601String().split('T').first} • Interest: ${CurrencyFormatter.formatPaise(rep.interestPortionPaise)} • Principal: ${CurrencyFormatter.formatPaise(rep.principalPortionPaise)}',
                         ),
-                        trailing: Text(
-                          CurrencyFormatter.formatPaise(rep.totalPaidPaise),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: AppColors.successGreen,
-                          ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              CurrencyFormatter.formatPaise(rep.totalPaidPaise),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: AppColors.successGreen,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.share, size: 20, color: Color(0xFF25D366)),
+                              tooltip: 'Share Receipt (WhatsApp/SMS)',
+                              onPressed: () {
+                                final tx = TransactionItem(
+                                  id: rep.transactionId,
+                                  organizationId: loan.organizationId,
+                                  memberId: loan.memberId,
+                                  memberCode: detail.memberCode,
+                                  memberName: detail.memberName,
+                                  transactionType: 'loan_repayment',
+                                  paymentMode: 'cash',
+                                  amountPaise: rep.totalPaidPaise,
+                                  transactionDate: rep.paymentDate,
+                                  receiptNumber: rep.receiptNumber,
+                                  remarks: 'Interest: ${CurrencyFormatter.formatPaise(rep.interestPortionPaise)}, Principal: ${CurrencyFormatter.formatPaise(rep.principalPortionPaise)}',
+                                  isReversed: false,
+                                );
+                                ReceiptSharingService.showShareOptionsModal(
+                                  context,
+                                  transaction: tx,
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );

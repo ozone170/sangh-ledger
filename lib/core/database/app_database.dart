@@ -40,6 +40,7 @@ class AppDatabase {
         onCreate: (db, version) async {
           await _createTables(db);
           await _seedChartOfAccounts(db);
+          await _seedDefaultOrganization(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           // Future migrations
@@ -325,6 +326,52 @@ class AppDatabase {
       await db.insert('accounting_accounts', acc,
           conflictAlgorithm: ConflictAlgorithm.ignore);
     }
+  }
+
+  Future<void> _seedDefaultOrganization(DatabaseExecutor db) async {
+    final orgResults = await db.query('organizations', limit: 1);
+    if (orgResults.isEmpty) {
+      final now = DateTime.now().toIso8601String();
+      await db.insert('organizations', {
+        'id': 'org_default_sangh',
+        'name': 'Sangh Ledger',
+        'address': 'Karnataka, India',
+        'contact_phone': '0000000000',
+        'financial_year_start': '04-01',
+        'currency': 'INR',
+        'monthly_interest_bps': 100,
+        'max_members': 100,
+        'is_initialized': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
+
+  /// Retrieves active organization ID, seeding a default organization record if empty
+  Future<String> getActiveOrganizationId([DatabaseExecutor? executor]) async {
+    final db = executor ?? await database;
+    final orgResults = await db.query('organizations', limit: 1);
+    if (orgResults.isNotEmpty) {
+      return orgResults.first['id'] as String;
+    }
+
+    const defaultOrgId = 'org_default_sangh';
+    final now = DateTime.now().toIso8601String();
+    await db.insert('organizations', {
+      'id': defaultOrgId,
+      'name': 'Sangh Ledger',
+      'address': 'Karnataka, India',
+      'contact_phone': '0000000000',
+      'financial_year_start': '04-01',
+      'currency': 'INR',
+      'monthly_interest_bps': 100,
+      'max_members': 100,
+      'is_initialized': 1,
+      'created_at': now,
+      'updated_at': now,
+    });
+    return defaultOrgId;
   }
 
   Future<void> close() async {

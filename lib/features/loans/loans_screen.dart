@@ -25,6 +25,24 @@ final loansListProvider = FutureProvider<List<Loan>>((ref) async {
 class LoansScreen extends ConsumerStatefulWidget {
   const LoansScreen({super.key});
 
+  /// Converts decimal percentage string (e.g. "1.5") into integer basis points (150) without float math
+  static int parseRateToBps(String text) {
+    final clean = text.trim();
+    if (clean.isEmpty) return 100;
+    final parts = clean.split('.');
+    final whole = int.tryParse(parts[0]) ?? 0;
+    int frac = 0;
+    if (parts.length > 1) {
+      final fracStr = parts[1].padRight(2, '0').substring(0, 2);
+      frac = int.tryParse(fracStr) ?? 0;
+    }
+    final bps = (whole * 100) + frac;
+    if (bps < 0 || bps > 10000) {
+      throw ArgumentError('Monthly interest rate must be between 0% and 100%');
+    }
+    return bps;
+  }
+
   @override
   ConsumerState<LoansScreen> createState() => _LoansScreenState();
 }
@@ -34,6 +52,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
     final l10n = AppLocalizations.of(context)!;
     String? selectedMemberId;
     int? principalPaise;
+    final interestRateController = TextEditingController(text: '1.0');
     final remarksController = TextEditingController();
 
     showDialog(
@@ -47,6 +66,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   membersAsync.when(
                     data: (members) {
@@ -72,12 +92,48 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                     onChanged: (val) => principalPaise = val,
                   ),
                   const SizedBox(height: 16),
-                  InputDecorator(
-                    decoration: InputDecoration(labelText: l10n.interestRate),
-                    child: const Text(
-                      '1.0% / month (100 basis points) - Reducing Balance',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.financialTeal),
+                  TextFormField(
+                    controller: interestRateController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: '${l10n.interestRate} *',
+                      suffixText: '% / mo',
+                      helperText: 'Reducing Balance • 365-Day Convention',
                     ),
+                    onChanged: (val) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('1.0%'),
+                        selected: interestRateController.text.trim() == '1.0' || interestRateController.text.trim() == '1',
+                        onSelected: (sel) {
+                          if (sel) {
+                            setDialogState(() => interestRateController.text = '1.0');
+                          }
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('1.5%'),
+                        selected: interestRateController.text.trim() == '1.5',
+                        onSelected: (sel) {
+                          if (sel) {
+                            setDialogState(() => interestRateController.text = '1.5');
+                          }
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('2.0%'),
+                        selected: interestRateController.text.trim() == '2.0' || interestRateController.text.trim() == '2',
+                        onSelected: (sel) {
+                          if (sel) {
+                            setDialogState(() => interestRateController.text = '2.0');
+                          }
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -101,10 +157,12 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                     return;
                   }
                   try {
+                    final bps = LoansScreen.parseRateToBps(interestRateController.text);
                     final repo = ref.read(loanRepositoryProvider);
                     final loan = await repo.createLoanDraft(
                       memberId: selectedMemberId!,
                       principalPaise: principalPaise!,
+                      monthlyInterestBps: bps,
                       remarks: remarksController.text.trim(),
                     );
                     invalidateFinancialProviders(ref, memberId: selectedMemberId, loanId: loan.id);
@@ -318,7 +376,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                           ],
                         ),
                         subtitle: Text(
-                          'Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)} @ 1%/mo',
+                          'Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)} @ ${(loan.monthlyInterestBps / 100).toStringAsFixed(loan.monthlyInterestBps % 100 == 0 ? 1 : 2)}%/mo',
                         ),
                         trailing: isDraft
                             ? ElevatedButton(
