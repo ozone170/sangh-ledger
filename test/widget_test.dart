@@ -1,30 +1,32 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:sangh_ledger/core/utils/currency_formatter.dart';
 import 'package:sangh_ledger/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('CurrencyFormatter tests', () {
+    test('formatPaise formats rupees and paise correctly in Indian system', () {
+      expect(CurrencyFormatter.formatPaise(0), '₹0.00');
+      expect(CurrencyFormatter.formatPaise(50), '₹0.50');
+      expect(CurrencyFormatter.formatPaise(10050), '₹100.50');
+      expect(CurrencyFormatter.formatPaise(10000000), '₹1,00,000.00');
+      expect(CurrencyFormatter.formatPaise(-5000), '-₹50.00');
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('parseToPaise parses decimal string without floating point inaccuracies', () {
+      expect(CurrencyFormatter.parseToPaise('0'), 0);
+      expect(CurrencyFormatter.parseToPaise('0.5'), 50);
+      expect(CurrencyFormatter.parseToPaise('0.50'), 50);
+      expect(CurrencyFormatter.parseToPaise('100.50'), 10050);
+      expect(CurrencyFormatter.parseToPaise('₹ 1,00,000.00'), 10000000);
+      expect(CurrencyFormatter.parseToPaise('invalid'), isNull);
+    });
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('SanghLedgerApp loads LoginScreen without crash', (WidgetTester tester) async {
+    await tester.pumpWidget(const SanghLedgerApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Sangh Ledger'), findsWidgets);
+    expect(find.text('Login to Ledger'), findsOneWidget);
   });
 }
