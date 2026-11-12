@@ -24,3 +24,4 @@ class AppColors {
   static const Color warningAmber = Color(0xFFED6C02);
   static const Color infoBlue = Color(0xFF0288D1);
 }
+

@@ -168,3 +168,4 @@ class MemberRepository {
     return Member.fromMap(results.first);
   }
 }
+

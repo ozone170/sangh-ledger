@@ -366,3 +366,4 @@ class AccountingEngine {
     return (result.first['balance'] as int?) ?? 0;
   }
 }
+

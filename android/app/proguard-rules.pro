@@ -17,7 +17,10 @@
 -keep class androidx.biometric.** { *; }
 -dontwarn androidx.biometric.**
 
-# Strip all sensitive debug logs from release APK
+# Play Store deferred component stubs (suppress unused warnings)
+-dontwarn com.google.android.play.core.**
+
+# Strip sensitive debug logs from release APK
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);

@@ -69,3 +69,4 @@ class Member {
         updatedAt: DateTime.parse(map['updated_at'] as String),
       );
 }
+

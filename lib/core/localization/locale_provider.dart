@@ -46,3 +46,4 @@ final localeProvider = StateNotifierProvider<LocaleNotifier, Locale>((ref) {
   final storage = ref.watch(secureStorageProvider);
   return LocaleNotifier(storage);
 });
+

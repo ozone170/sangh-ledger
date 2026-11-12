@@ -195,3 +195,4 @@ final onboardingProvider =
   final db = ref.watch(appDatabaseProvider);
   return OnboardingNotifier(storage, db);
 });
+

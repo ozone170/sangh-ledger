@@ -161,3 +161,4 @@ class ReportsService {
     return await db.query('audit_logs', orderBy: 'created_at DESC', limit: limit);
   }
 }
+

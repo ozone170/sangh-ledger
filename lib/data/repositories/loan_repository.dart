@@ -207,3 +207,4 @@ class LoanRepository {
     return results.map((m) => Loan.fromMap(m)).toList();
   }
 }
+

@@ -32,3 +32,4 @@ final membersListProvider = FutureProvider<List<Member>>((ref) async {
     query: filter.searchQuery,
   );
 });
+
