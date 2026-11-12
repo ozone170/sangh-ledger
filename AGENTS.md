@@ -48,3 +48,4 @@ Before declaring any task complete:
 2. Run `flutter test` (all unit & database tests must pass).
 3. Never use mock/fake financial figures in production screens.
 4. Provide a concise report of changed files, executed tests, and verification status.
+

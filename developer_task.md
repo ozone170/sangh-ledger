@@ -225,3 +225,4 @@ Write and execute an automated integration/unit test suite validating:
    flutter build apk --release --split-per-abi
    ```
    Verify output at `build\app\outputs\flutter-apk\app-arm64-v8a-release.apk`, generate `README.md` + Administrator User Guide, and verify installation on a physical Android phone offline.
+
