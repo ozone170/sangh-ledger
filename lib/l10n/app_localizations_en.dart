@@ -241,4 +241,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reversalReason => 'Reversal Reason';
+
+  @override
+  String get disburseLoan => 'Disburse Loan';
+
+  @override
+  String get recordRepayment => 'Record Repayment';
+
+  @override
+  String get reverseDisbursement => 'Reverse Disbursement';
+
+  @override
+  String get reverseDisbursementConfirm =>
+      'Are you sure you want to reverse this loan disbursement? A balanced reversal entry will be posted and the loan will revert to Draft.';
+
+  @override
+  String get outstandingLoanPrincipal => 'Outstanding Loan Principal';
+
+  @override
+  String get totalSavingsBalance => 'Total Savings Balance';
+
+  @override
+  String get repaymentHistory => 'Repayment History';
+
+  @override
+  String get noRepaymentsYet => 'No repayments recorded yet';
+
+  @override
+  String get loanDisbursedSuccess => 'Loan successfully disbursed!';
+
+  @override
+  String get disbursementReversedSuccess =>
+      'Disbursement successfully reversed and ledger balanced!';
 }

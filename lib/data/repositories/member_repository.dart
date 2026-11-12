@@ -3,6 +3,18 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/entities/member.dart';
 
+class MemberWithBalance {
+  final Member member;
+  final int savingsBalancePaise;
+  final int loanPrincipalPaise;
+
+  const MemberWithBalance({
+    required this.member,
+    required this.savingsBalancePaise,
+    required this.loanPrincipalPaise,
+  });
+}
+
 class MemberRepository {
   final AppDatabase _db;
   static const int maxActiveMembers = 100;
@@ -166,6 +178,65 @@ class MemberRepository {
     );
     if (results.isEmpty) return null;
     return Member.fromMap(results.first);
+  }
+
+  /// Fetches members with live ledger-calculated savings and loan balances
+  Future<List<MemberWithBalance>> getMembersWithBalances({bool? activeOnly, String? query}) async {
+    final db = await _db.database;
+    var whereClauses = <String>[];
+    var whereArgs = <dynamic>[];
+
+    if (activeOnly != null) {
+      whereClauses.add('m.is_active = ?');
+      whereArgs.add(activeOnly ? 1 : 0);
+    }
+
+    if (query != null && query.trim().isNotEmpty) {
+      whereClauses.add('(m.full_name LIKE ? OR m.member_code LIKE ? OR m.phone LIKE ?)');
+      final pattern = '%${query.trim()}%';
+      whereArgs.addAll([pattern, pattern, pattern]);
+    }
+
+    final where = whereClauses.isNotEmpty ? 'WHERE ${whereClauses.join(' AND ')}' : '';
+
+    final sql = '''
+      SELECT 
+        m.*,
+        COALESCE((
+          SELECT 
+            SUM(CASE WHEN t.transaction_type = 'savings_deposit' THEN t.amount_paise ELSE 0 END) -
+            SUM(CASE WHEN t.transaction_type = 'savings_withdrawal' THEN t.amount_paise ELSE 0 END)
+          FROM transactions t
+          WHERE t.member_id = m.id AND t.is_reversed = 0
+        ), 0) as savings_balance,
+        COALESCE((
+          SELECT 
+            SUM(l.principal_paise) - COALESCE((
+              SELECT SUM(r.principal_portion_paise)
+              FROM repayments r
+              JOIN transactions tr ON r.transaction_id = tr.id
+              WHERE r.loan_id = l.id AND tr.is_reversed = 0
+            ), 0)
+          FROM loans l
+          WHERE l.member_id = m.id AND l.status IN ('Active', 'Partially Repaid')
+        ), 0) as loan_principal
+      FROM members m
+      $where
+      ORDER BY m.member_code ASC
+    ''';
+
+    final results = await db.rawQuery(sql, whereArgs.isNotEmpty ? whereArgs : null);
+
+    return results.map((row) {
+      final member = Member.fromMap(row);
+      final savings = (row['savings_balance'] as int?) ?? 0;
+      final loan = (row['loan_principal'] as int?) ?? 0;
+      return MemberWithBalance(
+        member: member,
+        savingsBalancePaise: savings > 0 ? savings : 0,
+        loanPrincipalPaise: loan > 0 ? loan : 0,
+      );
+    }).toList();
   }
 }
 

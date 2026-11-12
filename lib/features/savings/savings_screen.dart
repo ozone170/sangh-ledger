@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/amount_input.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/savings_repository.dart';
 import '../../domain/services/accounting_engine.dart';
 import '../../l10n/app_localizations.dart';
@@ -12,6 +14,11 @@ import '../members/members_controller.dart';
 
 final savingsRepositoryProvider = Provider<SavingsRepository>((ref) {
   return SavingsRepository();
+});
+
+final recentSavingsActivitiesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final repo = ref.watch(savingsRepositoryProvider);
+  return repo.getSavingsTransactions();
 });
 
 class SavingsScreen extends ConsumerStatefulWidget {
@@ -102,10 +109,18 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       paymentMode: mode,
                       remarks: remarksController.text.trim(),
                     );
+
+                    // Explicitly invalidate all dependent financial providers
+                    invalidateFinancialProviders(ref, memberId: selectedMemberId);
+                    ref.invalidate(recentSavingsActivitiesProvider);
+
                     if (ctx.mounted) {
                       Navigator.of(ctx).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Deposit posted! Receipt: $rcp')),
+                        SnackBar(
+                          content: Text('Deposit posted! Receipt: $rcp'),
+                          backgroundColor: AppColors.successGreen,
+                        ),
                       );
                     }
                   } catch (e) {
@@ -128,56 +143,141 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final summaryAsync = ref.watch(dashboardSummaryProvider);
+    final activitiesAsync = ref.watch(recentSavingsActivitiesProvider);
+
+    final totalSavingsPaise = summaryAsync.when(
+      data: (s) => s.savingsLiabilityPaise,
+      loading: () => 0,
+      error: (_, _) => 0,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.savingsTab)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          FinancialSummaryCard(
-            title: l10n.savingsLiabilities,
-            amountPaise: 0,
-            subtitle: 'Total savings balance deposited across all active members',
-            icon: Icons.savings_outlined,
-            color: AppColors.financialTeal,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: PrimaryButton(
-                  text: l10n.deposit,
-                  icon: Icons.arrow_downward,
-                  backgroundColor: AppColors.financialTeal,
-                  onPressed: () => _showDepositDialog(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SecondaryButton(
-                  text: l10n.withdraw,
-                  icon: Icons.arrow_upward,
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Select member from Members tab to withdraw')),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Recent Savings Activities',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const EmptyState(
-            title: 'No Recent Savings Entries',
-            subtitle: 'Deposits and authorized withdrawals will be listed here.',
-            icon: Icons.history,
+      appBar: AppBar(
+        title: Text(l10n.savingsTab),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.invalidate(dashboardSummaryProvider);
+              ref.invalidate(recentSavingsActivitiesProvider);
+            },
           ),
         ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(dashboardSummaryProvider);
+          ref.invalidate(recentSavingsActivitiesProvider);
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            FinancialSummaryCard(
+              title: l10n.savingsLiabilities,
+              amountPaise: totalSavingsPaise,
+              subtitle: 'Total savings balance deposited across all active members',
+              icon: Icons.savings_outlined,
+              color: AppColors.financialTeal,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryButton(
+                    text: l10n.deposit,
+                    icon: Icons.arrow_downward,
+                    backgroundColor: AppColors.financialTeal,
+                    onPressed: () => _showDepositDialog(context),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SecondaryButton(
+                    text: l10n.withdraw,
+                    icon: Icons.arrow_upward,
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Select member from Members tab to record withdrawal')),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Recent Savings Activities',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            activitiesAsync.when(
+              loading: () => const LoadingState(),
+              error: (err, _) => ErrorState(
+                message: err.toString(),
+                onRetry: () => ref.invalidate(recentSavingsActivitiesProvider),
+              ),
+              data: (activities) {
+                if (activities.isEmpty) {
+                  return const EmptyState(
+                    title: 'No Recent Savings Entries',
+                    subtitle: 'Deposits and authorized withdrawals will be listed here.',
+                    icon: Icons.history,
+                  );
+                }
+                return Column(
+                  children: activities.take(15).map((act) {
+                    final isDeposit = act['transaction_type'] == 'savings_deposit';
+                    final isReversed = (act['is_reversed'] as int) == 1;
+                    final amountPaise = act['amount_paise'] as int;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isReversed
+                              ? AppColors.textSecondary.withValues(alpha: 0.1)
+                              : isDeposit
+                                  ? AppColors.financialTeal.withValues(alpha: 0.1)
+                                  : AppColors.errorCrimson.withValues(alpha: 0.1),
+                          foregroundColor: isReversed
+                              ? AppColors.textSecondary
+                              : isDeposit
+                                  ? AppColors.financialTeal
+                                  : AppColors.errorCrimson,
+                          child: Icon(isDeposit ? Icons.arrow_downward : Icons.arrow_upward),
+                        ),
+                        title: Text(
+                          '${act['member_name']} (${act['member_code']})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            decoration: isReversed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${act['receipt_number']} • ${act['transaction_date'].toString().split('T').first}',
+                        ),
+                        trailing: Text(
+                          '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: isReversed
+                                ? AppColors.textSecondary
+                                : isDeposit
+                                    ? AppColors.financialTeal
+                                    : AppColors.errorCrimson,
+                            decoration: isReversed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -240,4 +240,36 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get reversalReason => 'ಹಿಂಪಡೆಯಲು ಕಾರಣ';
+
+  @override
+  String get disburseLoan => 'ಸಾಲ ವಿತರಣೆ';
+
+  @override
+  String get recordRepayment => 'ಮರುಪಾವತಿ ದಾಖಲಿಸಿ';
+
+  @override
+  String get reverseDisbursement => 'ವಿತರಣೆ ಹಿಂಪಡೆಯಿರಿ';
+
+  @override
+  String get reverseDisbursementConfirm =>
+      'ಈ ಸಾಲ ವಿತರಣೆಯನ್ನು ಹಿಂಪಡೆಯಲು ನೀವು ಖಚಿತವಾಗಿ ಬಯಸುವಿರಾ? ಸಮತೋಲಿತ ಹಿಂಪಡೆಯುವ ನಮೂದು ದಾಖಲಾಗುತ್ತದೆ ಮತ್ತು ಸಾಲವು ಕರಡು ಹಂತಕ್ಕೆ ಮರಳುತ್ತದೆ.';
+
+  @override
+  String get outstandingLoanPrincipal => 'ಬಾಕಿ ಉಳಿದ ಸಾಲದ ಅಸಲು';
+
+  @override
+  String get totalSavingsBalance => 'ಒಟ್ಟು ಉಳಿತಾಯ ಮೊತ್ತ';
+
+  @override
+  String get repaymentHistory => 'ಮರುಪಾವತಿ ಇತಿಹಾಸ';
+
+  @override
+  String get noRepaymentsYet => 'ಇನ್ನೂ ಯಾವುದೇ ಮರುಪಾವತಿಗಳು ದಾಖಲಾಗಿಲ್ಲ';
+
+  @override
+  String get loanDisbursedSuccess => 'ಸಾಲವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ವಿತರಿಸಲಾಗಿದೆ!';
+
+  @override
+  String get disbursementReversedSuccess =>
+      'ವಿತರಣೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಹಿಂಪಡೆಯಲಾಗಿದೆ ಮತ್ತು ಲೆಡ್ಜರ್ ಸಮತೋಲನಗೊಂಡಿದೆ!';
 }

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/navigation/app_routes.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../domain/entities/member.dart';
+import '../../features/loans/loans_screen.dart';
 import '../../l10n/app_localizations.dart';
 import 'members_controller.dart';
 
@@ -48,6 +52,13 @@ class MemberDetailScreen extends ConsumerWidget {
           child: Scaffold(
             appBar: AppBar(
               title: Text('${member.fullName} (${member.memberCode})'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: () => invalidateFinancialProviders(ref, memberId: member.id),
+                ),
+              ],
               bottom: TabBar(
                 isScrollable: true,
                 indicatorColor: AppColors.financialTeal,
@@ -64,9 +75,9 @@ class MemberDetailScreen extends ConsumerWidget {
             body: TabBarView(
               children: [
                 _buildOverviewTab(context, ref, member, l10n),
-                _buildSavingsTab(context, l10n),
-                _buildLoansTab(context, l10n),
-                _buildTransactionsTab(context, l10n),
+                _buildSavingsTab(context, ref, member, l10n),
+                _buildLoansTab(context, ref, member, l10n),
+                _buildTransactionsTab(context, ref, member, l10n),
               ],
             ),
           ),
@@ -81,6 +92,9 @@ class MemberDetailScreen extends ConsumerWidget {
     Member member,
     AppLocalizations l10n,
   ) {
+    final savingsAsync = ref.watch(memberSavingsBalanceProvider(member.id));
+    final loanAsync = ref.watch(memberLoanPrincipalProvider(member.id));
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -93,9 +107,11 @@ class MemberDetailScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      member.fullName,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        member.fullName,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -126,6 +142,28 @@ class MemberDetailScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: FinancialSummaryCard(
+                title: l10n.totalSavingsBalance,
+                amountPaise: savingsAsync.value ?? 0,
+                icon: Icons.savings_outlined,
+                color: AppColors.financialTeal,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FinancialSummaryCard(
+                title: l10n.outstandingLoanPrincipal,
+                amountPaise: loanAsync.value ?? 0,
+                icon: Icons.account_balance_outlined,
+                color: AppColors.errorCrimson,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
         PrimaryButton(
           text: member.isActive ? 'Deactivate Member' : 'Activate Member',
           backgroundColor: member.isActive ? AppColors.errorCrimson : AppColors.successGreen,
@@ -142,8 +180,7 @@ class MemberDetailScreen extends ConsumerWidget {
               try {
                 final repo = ref.read(memberRepositoryProvider);
                 await repo.setMemberActiveStatus(member.id, !member.isActive);
-                ref.invalidate(memberDetailProvider(member.id));
-                ref.invalidate(membersListProvider);
+                invalidateFinancialProviders(ref, memberId: member.id);
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -169,42 +206,220 @@ class MemberDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSavingsTab(BuildContext context, AppLocalizations l10n) {
+  Widget _buildSavingsTab(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+    AppLocalizations l10n,
+  ) {
+    final savingsBalanceAsync = ref.watch(memberSavingsBalanceProvider(member.id));
+    final transactionsAsync = ref.watch(memberSavingsTransactionsProvider(member.id));
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         FinancialSummaryCard(
-          title: 'Total Savings Balance',
-          amountPaise: 0,
+          title: l10n.totalSavingsBalance,
+          amountPaise: savingsBalanceAsync.value ?? 0,
           icon: Icons.savings_outlined,
           color: AppColors.financialTeal,
         ),
         const SizedBox(height: 16),
-        const EmptyState(title: 'No savings transactions for this member'),
+        Text(
+          'Savings Activity History',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        transactionsAsync.when(
+          loading: () => const LoadingState(),
+          error: (err, _) => ErrorState(
+            message: err.toString(),
+            onRetry: () => ref.invalidate(memberSavingsTransactionsProvider(member.id)),
+          ),
+          data: (transactions) {
+            if (transactions.isEmpty) {
+              return const EmptyState(title: 'No savings transactions for this member');
+            }
+            return Column(
+              children: transactions.map((t) {
+                final isDeposit = t['transaction_type'] == 'savings_deposit';
+                final isReversed = (t['is_reversed'] as int) == 1;
+                final amountPaise = t['amount_paise'] as int;
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isDeposit
+                          ? AppColors.financialTeal.withValues(alpha: 0.1)
+                          : AppColors.errorCrimson.withValues(alpha: 0.1),
+                      foregroundColor: isDeposit ? AppColors.financialTeal : AppColors.errorCrimson,
+                      child: Icon(isDeposit ? Icons.arrow_downward : Icons.arrow_upward),
+                    ),
+                    title: Text(
+                      '${t['receipt_number']}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        decoration: isReversed ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${t['transaction_date'].toString().split('T').first} • Mode: ${t['payment_mode'].toString().toUpperCase()}',
+                    ),
+                    trailing: Text(
+                      '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: isReversed
+                            ? AppColors.textSecondary
+                            : isDeposit
+                                ? AppColors.financialTeal
+                                : AppColors.errorCrimson,
+                        decoration: isReversed ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildLoansTab(BuildContext context, AppLocalizations l10n) {
+  Widget _buildLoansTab(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+    AppLocalizations l10n,
+  ) {
+    final loanPrincipalAsync = ref.watch(memberLoanPrincipalProvider(member.id));
+    final loansAsync = ref.watch(loansListProvider);
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         FinancialSummaryCard(
-          title: 'Outstanding Loan Principal',
-          amountPaise: 0,
+          title: l10n.outstandingLoanPrincipal,
+          amountPaise: loanPrincipalAsync.value ?? 0,
           icon: Icons.account_balance_outlined,
           color: AppColors.errorCrimson,
         ),
         const SizedBox(height: 16),
-        const EmptyState(title: 'No active loans for this member'),
+        Text(
+          'Loans for ${member.fullName}',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        loansAsync.when(
+          loading: () => const LoadingState(),
+          error: (err, _) => ErrorState(
+            message: err.toString(),
+            onRetry: () => ref.invalidate(loansListProvider),
+          ),
+          data: (allLoans) {
+            final memberLoans = allLoans.where((l) => l.memberId == member.id).toList();
+            if (memberLoans.isEmpty) {
+              return const EmptyState(title: 'No loans found for this member');
+            }
+            return Column(
+              children: memberLoans.map((loan) {
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: loan.status == 'Active'
+                          ? AppColors.errorCrimson.withValues(alpha: 0.1)
+                          : AppColors.warningAmber.withValues(alpha: 0.1),
+                      foregroundColor: loan.status == 'Active'
+                          ? AppColors.errorCrimson
+                          : AppColors.warningAmber,
+                      child: const Icon(Icons.monetization_on_outlined),
+                    ),
+                    title: Text(loan.loanCode, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Status: ${loan.status} • Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)}'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () {
+                      Navigator.of(context).pushNamed(AppRoutes.loanDetail, arguments: loan.id);
+                    },
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildTransactionsTab(BuildContext context, AppLocalizations l10n) {
-    return const EmptyState(
-      title: 'No transactions recorded',
-      subtitle: 'All deposits, withdrawals, loans and repayments will show here.',
+  Widget _buildTransactionsTab(
+    BuildContext context,
+    WidgetRef ref,
+    Member member,
+    AppLocalizations l10n,
+  ) {
+    final txAsync = ref.watch(memberTransactionsProvider(member.id));
+
+    return txAsync.when(
+      loading: () => const LoadingState(),
+      error: (err, _) => ErrorState(
+        message: err.toString(),
+        onRetry: () => ref.invalidate(memberTransactionsProvider(member.id)),
+      ),
+      data: (transactions) {
+        if (transactions.isEmpty) {
+          return const EmptyState(
+            title: 'No transactions recorded',
+            subtitle: 'All deposits, withdrawals, loans and repayments will show here.',
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: transactions.length,
+          itemBuilder: (context, index) {
+            final t = transactions[index];
+            final isCredit = t.transactionType == 'savings_deposit' || t.transactionType == 'loan_repayment';
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isCredit
+                      ? AppColors.successGreen.withValues(alpha: 0.1)
+                      : AppColors.errorCrimson.withValues(alpha: 0.1),
+                  foregroundColor: isCredit ? AppColors.successGreen : AppColors.errorCrimson,
+                  child: Icon(isCredit ? Icons.arrow_downward : Icons.arrow_upward),
+                ),
+                title: Text(
+                  t.receiptNumber,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    decoration: t.isReversed ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                subtitle: Text(
+                  '${t.transactionType.replaceAll('_', ' ').toUpperCase()} • ${t.transactionDate.toIso8601String().split('T').first}',
+                ),
+                trailing: Text(
+                  '${isCredit ? '+' : '-'}${CurrencyFormatter.formatPaise(t.amountPaise)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: t.isReversed
+                        ? AppColors.textSecondary
+                        : isCredit
+                            ? AppColors.successGreen
+                            : AppColors.errorCrimson,
+                    decoration: t.isReversed ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

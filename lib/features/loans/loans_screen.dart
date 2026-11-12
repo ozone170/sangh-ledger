@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/navigation/app_routes.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/amount_input.dart';
 import '../../core/ui/financial_summary_card.dart';
@@ -106,11 +107,14 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                       principalPaise: principalPaise!,
                       remarks: remarksController.text.trim(),
                     );
-                    ref.invalidate(loansListProvider);
+                    invalidateFinancialProviders(ref, memberId: selectedMemberId, loanId: loan.id);
                     if (ctx.mounted) {
                       Navigator.of(ctx).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Loan created in Draft: ${loan.loanCode}')),
+                        SnackBar(
+                          content: Text('Loan created in Draft: ${loan.loanCode}'),
+                          backgroundColor: AppColors.successGreen,
+                        ),
                       );
                     }
                   } catch (e) {
@@ -138,13 +142,15 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Disburse Loan ${loan.loanCode}'),
+          title: Text('${l10n.disburseLoan} ${loan.loanCode}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)}'),
               const SizedBox(height: 16),
+              Text('${l10n.mode}:', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               SegmentedButton<PaymentMode>(
                 segments: [
                   ButtonSegment(value: PaymentMode.cash, label: Text(l10n.cash)),
@@ -161,8 +167,9 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
               child: Text(l10n.cancel),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.financialTeal),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Confirm Disbursement'),
+              child: Text(l10n.confirm),
             ),
           ],
         ),
@@ -173,10 +180,13 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
       try {
         final repo = ref.read(loanRepositoryProvider);
         await repo.disburseLoan(loanId: loan.id, paymentMode: mode);
-        ref.invalidate(loansListProvider);
+        invalidateFinancialProviders(ref, memberId: loan.memberId, loanId: loan.id);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Loan ${loan.loanCode} successfully disbursed!')),
+            SnackBar(
+              content: Text(l10n.loanDisbursedSuccess),
+              backgroundColor: AppColors.successGreen,
+            ),
           );
         }
       } catch (e) {
@@ -193,9 +203,27 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final loansAsync = ref.watch(loansListProvider);
+    final summaryAsync = ref.watch(dashboardSummaryProvider);
+
+    final loanReceivablePaise = summaryAsync.when(
+      data: (s) => s.loanPrincipalReceivablePaise,
+      loading: () => 0,
+      error: (_, _) => 0,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.loansTab)),
+      appBar: AppBar(
+        title: Text(l10n.loansTab),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.invalidate(loansListProvider);
+              ref.invalidate(dashboardSummaryProvider);
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.primaryNavy,
         foregroundColor: Colors.white,
@@ -209,7 +237,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
             padding: const EdgeInsets.all(16),
             child: FinancialSummaryCard(
               title: l10n.loanReceivables,
-              amountPaise: 0,
+              amountPaise: loanReceivablePaise,
               subtitle: 'Total outstanding principal across active loans',
               icon: Icons.account_balance_outlined,
               color: AppColors.errorCrimson,
@@ -236,17 +264,29 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                   itemCount: loans.length,
                   itemBuilder: (context, index) {
                     final loan = loans[index];
+                    final isDraft = loan.status == 'Draft';
+
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                       child: ListTile(
+                        onTap: () {
+                          Navigator.of(context).pushNamed(
+                            AppRoutes.loanDetail,
+                            arguments: loan.id,
+                          );
+                        },
                         leading: CircleAvatar(
-                          backgroundColor: loan.status == 'Active'
-                              ? AppColors.errorCrimson.withValues(alpha: 0.1)
-                              : AppColors.warningAmber.withValues(alpha: 0.1),
-                          foregroundColor: loan.status == 'Active'
-                              ? AppColors.errorCrimson
-                              : AppColors.warningAmber,
-                          child: Icon(loan.status == 'Active' ? Icons.monetization_on : Icons.edit_note),
+                          backgroundColor: isDraft
+                              ? AppColors.warningAmber.withValues(alpha: 0.15)
+                              : loan.status == 'Closed'
+                                  ? AppColors.successGreen.withValues(alpha: 0.15)
+                                  : AppColors.errorCrimson.withValues(alpha: 0.15),
+                          foregroundColor: isDraft
+                              ? AppColors.warningAmber
+                              : loan.status == 'Closed'
+                                  ? AppColors.successGreen
+                                  : AppColors.errorCrimson,
+                          child: Icon(isDraft ? Icons.edit_note : Icons.monetization_on),
                         ),
                         title: Row(
                           children: [
@@ -255,9 +295,11 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: loan.status == 'Active'
-                                    ? AppColors.errorCrimson.withValues(alpha: 0.1)
-                                    : AppColors.warningAmber.withValues(alpha: 0.1),
+                                color: isDraft
+                                    ? AppColors.warningAmber.withValues(alpha: 0.1)
+                                    : loan.status == 'Closed'
+                                        ? AppColors.successGreen.withValues(alpha: 0.1)
+                                        : AppColors.errorCrimson.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -265,9 +307,11 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: loan.status == 'Active'
-                                      ? AppColors.errorCrimson
-                                      : AppColors.warningAmber,
+                                  color: isDraft
+                                      ? AppColors.warningAmber
+                                      : loan.status == 'Closed'
+                                          ? AppColors.successGreen
+                                          : AppColors.errorCrimson,
                                 ),
                               ),
                             ),
@@ -276,24 +320,30 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                         subtitle: Text(
                           'Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)} @ 1%/mo',
                         ),
-                        trailing: loan.status == 'Draft'
+                        trailing: isDraft
                             ? ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.financialTeal,
                                   minimumSize: const Size(80, 36),
                                 ),
                                 onPressed: () => _disburseLoan(context, loan),
-                                child: const Text('Disburse'),
+                                child: Text(l10n.disburseLoan),
                               )
-                            : IconButton(
-                                icon: const Icon(Icons.payment),
-                                tooltip: 'Repay',
-                                onPressed: () {
-                                  Navigator.of(context).pushNamed(
-                                    AppRoutes.repayment,
-                                    arguments: loan.id,
-                                  );
-                                },
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.payment, color: AppColors.financialTeal),
+                                    tooltip: l10n.recordRepayment,
+                                    onPressed: () {
+                                      Navigator.of(context).pushNamed(
+                                        AppRoutes.repayment,
+                                        arguments: loan.id,
+                                      );
+                                    },
+                                  ),
+                                  const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary),
+                                ],
                               ),
                       ),
                     );

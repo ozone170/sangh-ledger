@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/navigation/app_routes.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/inputs.dart';
 import '../../core/ui/list_items.dart';
@@ -78,7 +79,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                     phone: phoneController.text.trim(),
                     address: addressController.text.trim(),
                   );
-                  ref.invalidate(membersListProvider);
+                  invalidateFinancialProviders(ref);
                   if (ctx.mounted) Navigator.of(ctx).pop();
                 } catch (e) {
                   if (ctx.mounted) {
@@ -99,12 +100,18 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final membersAsync = ref.watch(membersListProvider);
+    final membersAsync = ref.watch(membersWithBalancesProvider);
     final filter = ref.watch(memberFilterProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text('${l10n.members} (Cap: 100)'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.invalidate(membersWithBalancesProvider),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.primaryNavy,
@@ -171,10 +178,10 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
               loading: () => const LoadingState(),
               error: (err, _) => ErrorState(
                 message: err.toString(),
-                onRetry: () => ref.invalidate(membersListProvider),
+                onRetry: () => ref.invalidate(membersWithBalancesProvider),
               ),
-              data: (members) {
-                if (members.isEmpty) {
+              data: (membersList) {
+                if (membersList.isEmpty) {
                   return EmptyState(
                     title: 'No Members Found',
                     subtitle: 'Add a new member to begin transactions.',
@@ -184,15 +191,16 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
-                  itemCount: members.length,
+                  itemCount: membersList.length,
                   itemBuilder: (context, index) {
-                    final member = members[index];
+                    final item = membersList[index];
+                    final member = item.member;
                     return MemberListItem(
                       memberCode: member.memberCode,
                       name: member.fullName,
                       phone: member.phone,
-                      savingsBalancePaise: 0,
-                      loanBalancePaise: 0,
+                      savingsBalancePaise: item.savingsBalancePaise,
+                      loanBalancePaise: item.loanPrincipalPaise,
                       isActive: member.isActive,
                       onTap: () {
                         Navigator.of(context).pushNamed(

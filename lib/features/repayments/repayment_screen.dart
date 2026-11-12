@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/amount_input.dart';
 import '../../core/ui/buttons.dart';
@@ -78,6 +79,8 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
         paymentMode: _mode,
         paymentDate: _paymentDate,
       );
+
+      invalidateFinancialProviders(ref, loanId: _selectedLoanId);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

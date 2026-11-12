@@ -76,6 +76,16 @@
   "memberLedger": "ಸದಸ್ಯರ ಖಾತೆ ಪುಸ್ತಕ (ಲೆಡ್ಜರ್)",
   "auditLog": "ಆಡಿಟ್ ವಿವರ",
   "reversal": "ವ್ಯವಹಾರ ಹಿಂಪಡೆಯಿರಿ (ರಿವರ್ಸಲ್)",
-  "reversalReason": "ಹಿಂಪಡೆಯಲು ಕಾರಣ"
+  "reversalReason": "ಹಿಂಪಡೆಯಲು ಕಾರಣ",
+  "disburseLoan": "ಸಾಲ ವಿತರಣೆ",
+  "recordRepayment": "ಮರುಪಾವತಿ ದಾಖಲಿಸಿ",
+  "reverseDisbursement": "ವಿತರಣೆ ಹಿಂಪಡೆಯಿರಿ",
+  "reverseDisbursementConfirm": "ಈ ಸಾಲ ವಿತರಣೆಯನ್ನು ಹಿಂಪಡೆಯಲು ನೀವು ಖಚಿತವಾಗಿ ಬಯಸುವಿರಾ? ಸಮತೋಲಿತ ಹಿಂಪಡೆಯುವ ನಮೂದು ದಾಖಲಾಗುತ್ತದೆ ಮತ್ತು ಸಾಲವು ಕರಡು ಹಂತಕ್ಕೆ ಮರಳುತ್ತದೆ.",
+  "outstandingLoanPrincipal": "ಬಾಕಿ ಉಳಿದ ಸಾಲದ ಅಸಲು",
+  "totalSavingsBalance": "ಒಟ್ಟು ಉಳಿತಾಯ ಮೊತ್ತ",
+  "repaymentHistory": "ಮರುಪಾವತಿ ಇತಿಹಾಸ",
+  "noRepaymentsYet": "ಇನ್ನೂ ಯಾವುದೇ ಮರುಪಾವತಿಗಳು ದಾಖಲಾಗಿಲ್ಲ",
+  "loanDisbursedSuccess": "ಸಾಲವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ವಿತರಿಸಲಾಗಿದೆ!",
+  "disbursementReversedSuccess": "ವಿತರಣೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಹಿಂಪಡೆಯಲಾಗಿದೆ ಮತ್ತು ಲೆಡ್ಜರ್ ಸಮತೋಲನಗೊಂಡಿದೆ!"
 }
 

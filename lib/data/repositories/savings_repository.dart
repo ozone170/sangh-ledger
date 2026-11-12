@@ -190,5 +190,31 @@ class SavingsRepository {
       return receiptNumber;
     });
   }
+
+  /// Returns total savings liabilities across all active members from live journal lines (2001)
+  Future<int> getTotalSavingsLiabilities() async {
+    return _accounting.getAccountBalance(AccountingEngine.codeMemberSavingsLiability);
+  }
+
+  /// Returns savings transactions (deposits & withdrawals) optionally filtered by memberId
+  Future<List<Map<String, dynamic>>> getSavingsTransactions({String? memberId}) async {
+    final db = await _db.database;
+    var sql = '''
+      SELECT 
+        t.*,
+        m.member_code,
+        m.full_name as member_name
+      FROM transactions t
+      JOIN members m ON t.member_id = m.id
+      WHERE t.transaction_type IN ('savings_deposit', 'savings_withdrawal')
+    ''';
+    var args = <dynamic>[];
+    if (memberId != null) {
+      sql += ' AND t.member_id = ?';
+      args.add(memberId);
+    }
+    sql += ' ORDER BY t.transaction_date DESC';
+    return db.rawQuery(sql, args);
+  }
 }
 

@@ -559,6 +559,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reversal Reason'**
   String get reversalReason;
+
+  /// No description provided for @disburseLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Disburse Loan'**
+  String get disburseLoan;
+
+  /// No description provided for @recordRepayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Record Repayment'**
+  String get recordRepayment;
+
+  /// No description provided for @reverseDisbursement.
+  ///
+  /// In en, this message translates to:
+  /// **'Reverse Disbursement'**
+  String get reverseDisbursement;
+
+  /// No description provided for @reverseDisbursementConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to reverse this loan disbursement? A balanced reversal entry will be posted and the loan will revert to Draft.'**
+  String get reverseDisbursementConfirm;
+
+  /// No description provided for @outstandingLoanPrincipal.
+  ///
+  /// In en, this message translates to:
+  /// **'Outstanding Loan Principal'**
+  String get outstandingLoanPrincipal;
+
+  /// No description provided for @totalSavingsBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Savings Balance'**
+  String get totalSavingsBalance;
+
+  /// No description provided for @repaymentHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Repayment History'**
+  String get repaymentHistory;
+
+  /// No description provided for @noRepaymentsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No repayments recorded yet'**
+  String get noRepaymentsYet;
+
+  /// No description provided for @loanDisbursedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan successfully disbursed!'**
+  String get loanDisbursedSuccess;
+
+  /// No description provided for @disbursementReversedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Disbursement successfully reversed and ledger balanced!'**
+  String get disbursementReversedSuccess;
 }
 
 class _AppLocalizationsDelegate

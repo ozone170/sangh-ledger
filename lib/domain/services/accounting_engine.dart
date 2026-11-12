@@ -325,31 +325,39 @@ class AccountingEngine {
   /// For Assets/Expenses: Debits - Credits
   /// For Liabilities/Equity/Income: Credits - Debits
   Future<int> getAccountBalance(String accountCode) async {
+    final balances = await getAllAccountBalances();
+    return balances[accountCode] ?? 0;
+  }
+
+  /// Live query over journal_lines grouped by account_code adhering strictly to sign conventions:
+  /// Assets (1001, 1002, 1101, 1102): SUM(debit_paise) - SUM(credit_paise)
+  /// Liabilities (2001) & Income (4001): SUM(credit_paise) - SUM(debit_paise)
+  Future<Map<String, int>> getAllAccountBalances() async {
     final db = await _db.database;
-    final account = await db.query(
-      'accounting_accounts',
-      where: 'code = ?',
-      whereArgs: [accountCode],
-      limit: 1,
-    );
+    final results = await db.rawQuery('''
+      SELECT 
+        a.code,
+        a.account_type,
+        COALESCE(SUM(jl.debit_paise), 0) as total_debit,
+        COALESCE(SUM(jl.credit_paise), 0) as total_credit
+      FROM accounting_accounts a
+      LEFT JOIN journal_lines jl ON a.code = jl.account_code
+      GROUP BY a.code, a.account_type
+    ''');
 
-    if (account.isEmpty) return 0;
-    final accountType = account.first['account_type'] as String;
-
-    final result = await db.rawQuery('''
-      SELECT SUM(debit_paise) as total_debits, SUM(credit_paise) as total_credits
-      FROM journal_lines
-      WHERE account_code = ?
-    ''', [accountCode]);
-
-    final totalDebits = (result.first['total_debits'] as int?) ?? 0;
-    final totalCredits = (result.first['total_credits'] as int?) ?? 0;
-
-    if (accountType == 'Asset' || accountType == 'Expense') {
-      return totalDebits - totalCredits;
-    } else {
-      return totalCredits - totalDebits;
+    final map = <String, int>{};
+    for (final row in results) {
+      final code = row['code'] as String;
+      final type = row['account_type'] as String;
+      final debit = (row['total_debit'] as int?) ?? 0;
+      final credit = (row['total_credit'] as int?) ?? 0;
+      if (type == 'Asset' || type == 'Expense') {
+        map[code] = debit - credit;
+      } else {
+        map[code] = credit - debit;
+      }
     }
+    return map;
   }
 
   /// Derives a member's total savings balance from transaction entries
@@ -357,13 +365,34 @@ class AccountingEngine {
     final db = await _db.database;
     final result = await db.rawQuery('''
       SELECT 
-        COALESPE_SUM(CASE WHEN transaction_type = 'savings_deposit' THEN amount_paise ELSE 0 END) -
-        COALESPE_SUM(CASE WHEN transaction_type = 'savings_withdrawal' THEN amount_paise ELSE 0 END) as balance
+        COALESCE(SUM(CASE WHEN transaction_type = 'savings_deposit' THEN amount_paise ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN transaction_type = 'savings_withdrawal' THEN amount_paise ELSE 0 END), 0) as balance
       FROM transactions
       WHERE member_id = ? AND is_reversed = 0
-    '''.replaceAll('COALESPE_SUM', 'COALESCE(SUM'));
+    ''', [memberId]);
 
     return (result.first['balance'] as int?) ?? 0;
+  }
+
+  /// Derives a member's outstanding loan principal from active loans and principal repayments
+  Future<int> getMemberLoanPrincipal(String memberId) async {
+    final db = await _db.database;
+    final result = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(l.principal_paise), 0) - 
+        COALESCE((
+          SELECT SUM(r.principal_portion_paise)
+          FROM repayments r
+          JOIN loans l2 ON r.loan_id = l2.id
+          JOIN transactions t ON r.transaction_id = t.id
+          WHERE l2.member_id = ? AND t.is_reversed = 0
+        ), 0) as outstanding_principal
+      FROM loans l
+      WHERE l.member_id = ? AND l.status IN ('Active', 'Partially Repaid')
+    ''', [memberId, memberId]);
+
+    final principal = (result.first['outstanding_principal'] as int?) ?? 0;
+    return principal > 0 ? principal : 0;
   }
 }
 

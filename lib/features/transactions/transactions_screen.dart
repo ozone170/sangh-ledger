@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/inputs.dart';
@@ -205,7 +206,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           transactionId: tx.id,
           reason: reasonController.text.trim(),
         );
-        ref.invalidate(transactionsListProvider);
+        invalidateFinancialProviders(ref, memberId: tx.memberId);
         if (context.mounted) {
           Navigator.of(context).pop(); // close bottom sheet
           ScaffoldMessenger.of(context).showSnackBar(

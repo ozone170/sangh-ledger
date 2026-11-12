@@ -192,21 +192,35 @@ class TransactionRepository {
         whereArgs: [transactionId],
       );
 
-      // 3. Find and reverse journal entry
+      // 3. Find and reverse all journal entries for this transaction
       final entryResults = await txn.query(
         'journal_entries',
         where: 'transaction_id = ? AND is_reversal = 0',
         whereArgs: [transactionId],
-        limit: 1,
       );
 
-      if (entryResults.isNotEmpty) {
-        final originalEntryId = entryResults.first['id'] as String;
+      for (final entry in entryResults) {
+        final originalEntryId = entry['id'] as String;
         await _accounting.reverseJournalEntry(
           txn,
           originalEntryId: originalEntryId,
           reversalReason: reason.trim(),
           reversalDate: now,
+        );
+      }
+
+      // If loan disbursement is reversed, revert loan status to Draft
+      if (tx['transaction_type'] == 'loan_disbursement') {
+        final receipt = tx['receipt_number'] as String;
+        final loanCode = receipt.replaceFirst('DIS-', '');
+        await txn.update(
+          'loans',
+          {
+            'status': 'Draft',
+            'updated_at': now.toIso8601String(),
+          },
+          where: 'loan_code = ?',
+          whereArgs: [loanCode],
         );
       }
 

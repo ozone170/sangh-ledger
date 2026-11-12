@@ -76,6 +76,16 @@
   "memberLedger": "Member Ledger",
   "auditLog": "Audit Log",
   "reversal": "Reverse Transaction",
-  "reversalReason": "Reversal Reason"
+  "reversalReason": "Reversal Reason",
+  "disburseLoan": "Disburse Loan",
+  "recordRepayment": "Record Repayment",
+  "reverseDisbursement": "Reverse Disbursement",
+  "reverseDisbursementConfirm": "Are you sure you want to reverse this loan disbursement? A balanced reversal entry will be posted and the loan will revert to Draft.",
+  "outstandingLoanPrincipal": "Outstanding Loan Principal",
+  "totalSavingsBalance": "Total Savings Balance",
+  "repaymentHistory": "Repayment History",
+  "noRepaymentsYet": "No repayments recorded yet",
+  "loanDisbursedSuccess": "Loan successfully disbursed!",
+  "disbursementReversedSuccess": "Disbursement successfully reversed and ledger balanced!"
 }
 
