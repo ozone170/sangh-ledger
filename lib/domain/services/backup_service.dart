@@ -65,8 +65,50 @@ class BackupService {
     return Uint8List.fromList(keyBytes);
   }
 
-  /// Returns the dedicated directory for storing Sangh Ledger backups
+  static const String keyCustomBackupFolder = 'local_backup_folder_path';
+
+  /// Retrieves user-selected visible device backup folder path if configured
+  Future<String?> getCustomBackupFolderPath() async {
+    try {
+      final db = await _db.database;
+      final rows = await db.query(
+        'app_settings',
+        where: 'key = ?',
+        whereArgs: [keyCustomBackupFolder],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return rows.first['value'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Sets user-selected visible device backup folder path
+  Future<void> setCustomBackupFolderPath(String path) async {
+    try {
+      final db = await _db.database;
+      final now = DateTime.now().toIso8601String();
+      await db.rawInsert('''
+        INSERT OR REPLACE INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+      ''', [keyCustomBackupFolder, path, now]);
+    } catch (_) {}
+  }
+
+  /// Returns the dedicated directory for storing Sangh Ledger backups.
+  /// If a user-selected visible folder is configured, returns that folder;
+  /// otherwise defaults to app documents / SanghLedger_Backups.
   Future<Directory> getBackupDirectory() async {
+    final customPath = await getCustomBackupFolderPath();
+    if (customPath != null && customPath.trim().isNotEmpty) {
+      final customDir = Directory(customPath.trim());
+      if (!await customDir.exists()) {
+        await customDir.create(recursive: true);
+      }
+      return customDir;
+    }
+
     final docsDir = await getApplicationDocumentsDirectory();
     final backupDir = Directory(p.join(docsDir.path, 'SanghLedger_Backups'));
     if (!await backupDir.exists()) {

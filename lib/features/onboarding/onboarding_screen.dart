@@ -2,12 +2,15 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
-import '../../domain/services/backup_service.dart';
+import '../../domain/services/google_drive_backup_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../backup/restore_backup_dialog.dart';
+import '../settings/settings_screen.dart';
 import 'onboarding_controller.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -40,6 +43,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   late final TextEditingController _recoveryQuestionController;
   late final TextEditingController _recoveryAnswerController;
   bool _biometricOptIn = false;
+
+  // Step 6 Backup Setup state
+  String? _gDriveEmail;
+  String? _selectedLocalFolder;
+  bool _isConnectingDrive = false;
 
   @override
   void initState() {
@@ -146,67 +154,45 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _handleRestoreBackup(BuildContext context) async {
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
+    await RestoreBackupDialog.show(context);
+  }
 
-    if (files.isEmpty || files.first.path == null || !context.mounted) return;
-    final backupFile = File(files.first.path!);
-    final passwordController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Restore Encrypted Backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Backup File: ${backupFile.path.split(Platform.pathSeparator).last}'),
-            const SizedBox(height: 12),
-            const Text('Enter the Admin password that was used when creating this backup:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Admin Password *', prefixIcon: Icon(Icons.lock)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (passwordController.text.isNotEmpty) Navigator.of(ctx).pop(true);
-            },
-            child: const Text('Decrypt & Restore'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && passwordController.text.isNotEmpty && context.mounted) {
-      try {
-        await BackupService().restoreBackup(
-          backupZipFile: backupFile,
-          adminPassword: passwordController.text,
+  Future<void> _connectGoogleDrive() async {
+    setState(() => _isConnectingDrive = true);
+    try {
+      final gDrive = ref.read(googleDriveBackupServiceProvider);
+      final email = await gDrive.signInAndBindAccount();
+      if (email != null && mounted) {
+        setState(() => _gDriveEmail = email);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Drive connected: $email'), backgroundColor: AppColors.successGreen),
         );
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Backup restored successfully! Welcome back.'),
-              backgroundColor: AppColors.successGreen,
-            ),
-          );
-          Navigator.of(context).pushReplacementNamed(AppRoutes.mainShell);
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Restore failed: $e'), backgroundColor: AppColors.errorCrimson),
-          );
-        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Sign-In failed: $e'), backgroundColor: AppColors.errorCrimson),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isConnectingDrive = false);
+    }
+  }
+
+  Future<void> _selectLocalFolder() async {
+    final selectedDirectory = await FilePicker.getDirectoryPath();
+    if (selectedDirectory != null && selectedDirectory.isNotEmpty) {
+      final backupDir = Directory(p.join(selectedDirectory, 'SanghLedger_Backups'));
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+      final backupService = ref.read(backupServiceProvider);
+      await backupService.setCustomBackupFolderPath(backupDir.path);
+      if (mounted) {
+        setState(() => _selectedLocalFolder = backupDir.path);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backup folder set to: ${backupDir.path}'), backgroundColor: AppColors.successGreen),
+        );
       }
     }
   }
@@ -537,7 +523,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 24),
           _buildDefaultTile(Icons.currency_rupee, 'Currency', 'Indian Rupee (INR - ₹) in exact integer paise'),
           _buildDefaultTile(Icons.percent, 'Interest Rate', '1% monthly reducing-balance (100 basis points)'),
-          _buildDefaultTile(Icons.calendar_month, 'Day-Count Convention', '365-day reducing daily balance basis'),
+          _buildDefaultTile(Icons.calendar_month, 'Day-Count Convention', '30-day month reducing daily balance basis'),
           _buildDefaultTile(Icons.group, 'Member Scale Constraint', 'Maximum 100 active members (SGH001–SGH100)'),
           _buildDefaultTile(Icons.account_balance, 'Accounting Method', 'Strict Double-Entry Balanced Ledger (Assets = Liabilities + Equity)'),
           const SizedBox(height: 24),
@@ -587,7 +573,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          PrimaryButton(text: 'Proceed to Commit', onPressed: _nextStep),
+          PrimaryButton(text: 'Next: Backup Setup', onPressed: _nextStep),
         ],
       ),
     );
@@ -606,35 +592,136 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  // Screen 6: Commit & Complete
+  // Screen 6: Backup Setup & Launch
   Widget _buildStep6(AppLocalizations l10n) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.verified_user, size: 64, color: AppColors.financialTeal),
-            const SizedBox(height: 20),
-            Text(
-              'Ready to Initialize Ledger',
-              style: Theme.of(context).textTheme.headlineMedium,
-              textAlign: TextAlign.center,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Step 6: Backup Destination Setup', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          const Text(
+            'Never lose your ledger records. Configure automated Google Drive sync and select a visible device backup folder before launching.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+
+          // Google Drive Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.cloud_upload_rounded, color: AppColors.primaryNavy),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Google Drive Cloud Backup',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                      if (_gDriveEmail != null)
+                        const Icon(Icons.check_circle, color: AppColors.successGreen, size: 20),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_gDriveEmail != null) ...[
+                    Text('Connected: $_gDriveEmail', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.successGreen, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    const Text('Dedicated folder: Google Drive / SanghLedger_Backups', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  ] else ...[
+                    const Text(
+                      'Bind your Google account to auto-sync encrypted AES-256-GCM backups so your data can be restored on any device.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 12),
+                    SecondaryButton(
+                      text: 'Connect Google Drive Backup',
+                      icon: Icons.add_to_drive,
+                      isLoading: _isConnectingDrive,
+                      onPressed: _connectGoogleDrive,
+                    ),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Your organization and administrator credentials will be atomically recorded in the encrypted SQLCipher database.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+
+          // Visible Device Backup Folder Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.folder_shared, color: AppColors.financialTeal),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Visible Device Backup Folder',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                      if (_selectedLocalFolder != null)
+                        const Icon(Icons.check_circle, color: AppColors.successGreen, size: 20),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _selectedLocalFolder != null
+                        ? 'Saved to: $_selectedLocalFolder'
+                        : 'Default app documents (/SanghLedger_Backups). You can pick a visible folder (e.g. Documents or Downloads) so backups are directly accessible.',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  SecondaryButton(
+                    text: _selectedLocalFolder != null ? 'Change Device Folder' : 'Select Device Backup Folder',
+                    icon: Icons.create_new_folder_outlined,
+                    onPressed: _selectLocalFolder,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 32),
-            PrimaryButton(
-              text: 'Initialize & Launch Sangh Ledger',
-              isLoading: _isCommitting,
-              onPressed: _completeSetup,
+          ),
+          const SizedBox(height: 16),
+
+          // 2-Day Rolling Policy Banner
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryNavy.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.2)),
             ),
-          ],
-        ),
+            child: const Row(
+              children: [
+                Icon(Icons.shield_outlined, color: AppColors.primaryNavy, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Active 2-Day Rolling Retention: Automatically keeps only the 2 most recent daily backups to save phone and cloud storage.',
+                    style: TextStyle(fontSize: 12, color: AppColors.primaryNavy, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          PrimaryButton(
+            text: 'Initialize & Launch Sangh Ledger',
+            icon: Icons.rocket_launch,
+            isLoading: _isCommitting,
+            onPressed: _completeSetup,
+          ),
+        ],
       ),
     );
   }

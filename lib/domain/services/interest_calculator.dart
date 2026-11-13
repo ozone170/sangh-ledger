@@ -19,9 +19,10 @@ class InterestCalculationResult {
 class InterestCalculator {
   InterestCalculator._();
 
-  static const int defaultDenominator = 3650000; // 10,000 basis points * 365 days
+  // 30-Day Month Convention: 10,000 basis points * 30 days = 300,000
+  static const int defaultDenominator = 300000;
   static final BigInt _denominatorBigInt = BigInt.from(defaultDenominator);
-  static final BigInt _halfDenominator = BigInt.from(defaultDenominator ~/ 2); // 1825000 for ROUND_HALF_UP
+  static final BigInt _halfDenominator = BigInt.from(defaultDenominator ~/ 2); // 150000 for ROUND_HALF_UP
 
   /// Normalizes a DateTime to Asia/Kolkata (UTC+05:30) date-only (midnight)
   static DateTime toKolkataDate(DateTime date) {
@@ -38,8 +39,9 @@ class InterestCalculator {
     return diff > 0 ? diff : 0;
   }
 
-  /// Calculates reducing-balance interest in integer paise using BigInt arithmetic with ROUND_HALF_UP
-  /// Formula: ((principalPaise * monthlyBps * 12 * days) + 1825000) / 3650000
+  /// Calculates reducing-balance daily interest in integer paise using exact BigInt arithmetic with ROUND_HALF_UP.
+  /// 30-Day Month Convention Formula:
+  /// ((principalPaise * monthlyBps * days) + 150000) / 300000
   static int calculateReducingInterestPaise({
     required int principalPaise,
     required int monthlyBps,
@@ -51,31 +53,33 @@ class InterestCalculator {
 
     final p = BigInt.from(principalPaise);
     final bps = BigInt.from(monthlyBps);
-    final twelve = BigInt.from(12);
     final d = BigInt.from(days);
 
-    final numerator = p * bps * twelve * d;
+    final numerator = p * bps * d;
     final rounded = (numerator + _halfDenominator) ~/ _denominatorBigInt;
 
     return rounded.toInt();
   }
 
-  /// Computes full interest calculation result between two dates
+  /// Computes full interest calculation result between two dates using 30-day month daily convention.
+  /// If elapsedDays == 0 (same-day disbursement + repayment), charges minimum 1 day of interest (effectiveDays = 1).
   static InterestCalculationResult computeAccrual({
     required int principalPaise,
     required int monthlyBps,
     required DateTime fromDate,
     required DateTime toDate,
+    bool chargeMinOneDayForSameDay = true,
   }) {
-    final days = calculateElapsedDays(fromDate, toDate);
+    final rawElapsedDays = calculateElapsedDays(fromDate, toDate);
+    final effectiveDays = (rawElapsedDays == 0 && chargeMinOneDayForSameDay) ? 1 : rawElapsedDays;
     final interest = calculateReducingInterestPaise(
       principalPaise: principalPaise,
       monthlyBps: monthlyBps,
-      days: days,
+      days: effectiveDays,
     );
 
     return InterestCalculationResult(
-      days: days,
+      days: effectiveDays,
       interestPaise: interest,
       outstandingPrincipalPaise: principalPaise,
       monthlyBps: monthlyBps,

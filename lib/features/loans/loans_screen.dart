@@ -103,7 +103,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                     decoration: InputDecoration(
                       labelText: '${l10n.interestRate} *',
                       suffixText: '% / mo',
-                      helperText: 'Reducing Balance • 365-Day Convention',
+                      helperText: 'Reducing Balance • 30-Day Month Convention',
                     ),
                     onChanged: (val) => setDialogState(() {}),
                   ),

@@ -40,6 +40,11 @@ dependencies:
   file_picker: ^13.3.3
   image: ^4.2.0
 
+  # Google Sign-In & Google Drive APIs
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  http: ^1.2.2
+
   # Localization, Formatting, Timezone, Utils
   intl: ^0.20.2
   uuid: ^4.4.0

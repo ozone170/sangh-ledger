@@ -36,34 +36,31 @@ void main() {
       expect(() => LoansScreen.parseRateToBps('-1'), throwsArgumentError);
     });
 
-    test('Part B: Reducing Balance Calculation with Custom Rates (1.5% and 2.0%)', () {
+    test('Part B: Reducing Balance Calculation with Custom Rates (1.5% and 2.0%) under 30-Day Convention', () {
       // Loan of ₹10,000 (1,000,000 paise) for 30 days
-      // At 1.0% monthly (100 bps):
-      // (1,000,000 * 100 * 12 * 30 + 1,825,000) / 3,650,000 = 9863 paise (₹98.63)
+      // At 1.0% monthly (100 bps): 1% of ₹10,000 = ₹100.00 (10000 paise)
       final int100 = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 1000000,
         monthlyBps: 100,
         days: 30,
       );
-      expect(int100, 9863);
+      expect(int100, 10000);
 
-      // At 1.5% monthly (150 bps):
-      // 1.5x of rate -> (1,000,000 * 150 * 12 * 30 + 1,825,000) / 3,650,000 = 14795 paise (₹147.95)
+      // At 1.5% monthly (150 bps): 1.5% of ₹10,000 = ₹150.00 (15000 paise)
       final int150 = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 1000000,
         monthlyBps: 150,
         days: 30,
       );
-      expect(int150, 14795);
+      expect(int150, 15000);
 
-      // At 2.0% monthly (200 bps):
-      // 2x of rate -> (1,000,000 * 200 * 12 * 30 + 1,825,000) / 3,650,000 = 19726 paise (₹197.26)
+      // At 2.0% monthly (200 bps): 2% of ₹10,000 = ₹200.00 (20000 paise)
       final int200 = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 1000000,
         monthlyBps: 200,
         days: 30,
       );
-      expect(int200, 19726);
+      expect(int200, 20000);
     });
 
     test('Part C: Phone Number Sanitization for India WhatsApp/SMS', () {

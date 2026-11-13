@@ -8,13 +8,13 @@ import 'package:sangh_ledger/domain/services/interest_calculator.dart';
 
 void main() {
   group('TASK 17 – Full Financial, Security & Scale Audit Suite', () {
-    test('1. Financial Edge Cases – ₹50,00,000 Large Loan 365 Days Interest', () {
+    test('1. Financial Edge Cases – ₹50,00,000 Large Loan 360 Days (12 Months) Interest', () {
       // Principal: ₹50,00,000 = 500,000,000 paise
       // Annual rate: 12% = ₹6,00,000 = 60,000,000 paise
       final interest = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 500000000,
         monthlyBps: 100, // 1%
-        days: 365,
+        days: 360,
       );
 
       expect(interest, 60000000); // Exact ₹6,00,000.00 to the single paisa!
@@ -26,8 +26,8 @@ void main() {
         monthlyBps: 100,
         days: 15,
       );
-      // (10000 * 100 * 12 * 15 + 1825000) / 3650000 = (180,000,000 + 1,825,000) / 3,650,000 = 49 paise
-      expect(int1, 49);
+      // (10000 * 100 * 15 + 150000) / 300000 = 50 paise (exact half-month interest)
+      expect(int1, 50);
     });
 
     test('3. Scale & Performance – 10,000 Transaction Arithmetic Stability', () {

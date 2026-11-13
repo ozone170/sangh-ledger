@@ -253,7 +253,7 @@ class LoanDetailScreen extends ConsumerWidget {
                           const Icon(Icons.percent, size: 18, color: AppColors.textSecondary),
                           const SizedBox(width: 8),
                           Text(
-                            '1.0% / month (100 bps) - Reducing Balance (365 days)',
+                            '1.0% / month (100 bps) - Reducing Balance (30-day month convention)',
                             style: const TextStyle(color: AppColors.financialTeal, fontWeight: FontWeight.w500),
                           ),
                         ],

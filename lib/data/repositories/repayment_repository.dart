@@ -86,11 +86,20 @@ class RepaymentRepository {
       }
     }
 
-    final elapsedDays = InterestCalculator.calculateElapsedDays(fromDate, paymentDate);
+    final fromDateKolkata = InterestCalculator.toKolkataDate(fromDate);
+    final paymentDateKolkata = InterestCalculator.toKolkataDate(paymentDate);
+    if (paymentDateKolkata.isBefore(fromDateKolkata)) {
+      throw ArgumentError('Repayment date cannot be before disbursement date');
+    }
+
+    final rawElapsedDays = InterestCalculator.calculateElapsedDays(fromDate, paymentDate);
+    // Same-Day Repayment Rule: If elapsedDays == 0 on initial repayment, charge minimum 1 day of interest
+    final effectiveDays = (rawElapsedDays == 0 && lastRepayment.isEmpty) ? 1 : rawElapsedDays;
+
     final newlyAccruedInterest = InterestCalculator.calculateReducingInterestPaise(
       principalPaise: currentOutstandingPrincipal,
       monthlyBps: monthlyBps,
-      days: daysToAccrue(elapsedDays),
+      days: effectiveDays,
     );
 
     // Total unpaid interest = newly accrued + previous unpaid interest
@@ -127,7 +136,7 @@ class RepaymentRepository {
       principalPaidPaise: principalPaid,
       remainingPrincipalPaise: remainingPrincipal,
       remainingInterestPaise: remainingInterest,
-      elapsedDays: elapsedDays,
+      elapsedDays: effectiveDays,
     );
   }
 
@@ -322,11 +331,18 @@ class RepaymentRepository {
       }
     }
 
-    final elapsedDays = InterestCalculator.calculateElapsedDays(fromDate, date);
+    final fromDateKolkata = InterestCalculator.toKolkataDate(fromDate);
+    final dateKolkata = InterestCalculator.toKolkataDate(date);
+    if (dateKolkata.isBefore(fromDateKolkata)) {
+      throw ArgumentError('Selected date cannot be before disbursement date');
+    }
+
+    final rawElapsedDays = InterestCalculator.calculateElapsedDays(fromDate, date);
+    final effectiveDays = (rawElapsedDays == 0 && lastRepayment.isEmpty) ? 1 : rawElapsedDays;
     final accruedInterestPaise = InterestCalculator.calculateReducingInterestPaise(
       principalPaise: currentOutstandingPrincipal,
       monthlyBps: monthlyBps,
-      days: elapsedDays > 0 ? elapsedDays : 0,
+      days: effectiveDays,
     );
 
     final member = await db.query('members', where: 'id = ?', whereArgs: [loan['member_id']], limit: 1);
@@ -340,7 +356,7 @@ class RepaymentRepository {
       'totalPaidInterestPaise': totalPaidInterest,
       'accruedInterestPaise': accruedInterestPaise,
       'totalOutstandingPaise': currentOutstandingPrincipal + accruedInterestPaise,
-      'elapsedDays': elapsedDays,
+      'elapsedDays': effectiveDays,
       'monthlyBps': monthlyBps,
     };
   }

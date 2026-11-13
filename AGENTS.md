@@ -17,11 +17,12 @@
 ## 3. Financial Implementation Rules (Non-Negotiable)
 1. **Integer Paise Only:** Store and compute ALL money in `int` paise (`₹100.50` = `10050`). Never use `double` or `float` for monetary values.
 2. **Basis Points:** Store interest rates as `int` basis points (`1%` = `100` bps). Default monthly rate = `100` bps.
-3. **Reducing-Balance Daily Interest:**
+3. **Reducing-Balance Daily Interest (30-Day Month Convention):**
    - Calculated on outstanding principal only (non-compounding).
-   - Daily rate convention: `(monthly_bps / 10000) * 12 / 365`.
-   - Formula using `BigInt` to avoid overflow: `((BigInt.from(principalPaise) * BigInt.from(monthlyBps) * BigInt.from(12) * BigInt.from(days)) / BigInt.from(3650000))` with `ROUND_HALF_UP`.
-4. **Repayment Allocation Order:** Settle accrued interest FIRST, apply remaining payment to principal SECOND.
+   - Daily rate convention: `(monthly_bps / 10000) / 30`.
+   - Formula using `BigInt` to avoid overflow: `((BigInt.from(principalPaise) * BigInt.from(monthlyBps) * BigInt.from(effectiveDays)) + BigInt.from(150000)) ~/ BigInt.from(300000)` with `ROUND_HALF_UP`.
+   - **Same-Day Repayment Rule:** If a loan is disbursed and repaid on the same calendar day (`elapsedDays == 0`), charge 1 day of interest (`effectiveDays = 1`, e.g. ₹10.00 / 30 = ₹0.33) rather than ₹0.
+4. **Repayment Allocation Order:** Settle accrued interest FIRST, apply remaining payment to principal SECOND. If balance reaches 0, transition loan status to `Closed`.
 5. **Timezone:** Interpret all financial dates and day counts strictly in `Asia/Kolkata` (`UTC+05:30`).
 
 ## 4. Double-Entry Accounting & Immutability

@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sangh_ledger/domain/services/interest_calculator.dart';
 
 void main() {
-  group('InterestCalculator Reducing-Balance Daily Interest Tests', () {
+  group('InterestCalculator 30-Day Month Reducing-Balance Daily Interest Tests', () {
     test('Zero days or zero principal produces 0 paise interest', () {
       expect(
         InterestCalculator.calculateReducingInterestPaise(
@@ -23,37 +23,60 @@ void main() {
       );
     });
 
-    test('365 days at 100 bps monthly (1%) produces exactly 12% annual interest', () {
-      // Principal = ₹10,000 (1,000,000 paise)
-      // 12% of 10,000 = ₹1,200 (120,000 paise)
+    test('30-Day month convention: ₹1,000 loan at 1% monthly for 30 days = exactly ₹10.00 (1000 paise)', () {
+      // Principal = ₹1,000 (100,000 paise)
+      // 1% of ₹1,000 = ₹10.00 (1,000 paise)
       final interest = InterestCalculator.calculateReducingInterestPaise(
-        principalPaise: 1000000,
+        principalPaise: 100000,
         monthlyBps: 100,
-        days: 365,
+        days: 30,
       );
 
-      expect(interest, 120000); // Exactly ₹1,200.00
+      expect(interest, 1000); // Exactly ₹10.00 (1000 paise)
+    });
+
+    test('30-Day month convention: ₹1,000 loan at 1% monthly for 1 day = ₹0.33 (33 paise)', () {
+      // Principal = ₹1,000 (100,000 paise)
+      // Daily interest = ₹10 / 30 = ₹0.33 (33 paise)
+      final interest = InterestCalculator.calculateReducingInterestPaise(
+        principalPaise: 100000,
+        monthlyBps: 100,
+        days: 1,
+      );
+
+      expect(interest, 33); // Exactly ₹0.33 (33 paise)
+    });
+
+    test('Same-day repayment computeAccrual charges minimum 1-day interest (₹0.33 on ₹1,000)', () {
+      final now = DateTime.utc(2026, 11, 13, 10, 0);
+      final laterToday = DateTime.utc(2026, 11, 13, 16, 0);
+
+      final accrual = InterestCalculator.computeAccrual(
+        principalPaise: 100000,
+        monthlyBps: 100,
+        fromDate: now,
+        toDate: laterToday,
+      );
+
+      expect(accrual.days, 1);
+      expect(accrual.interestPaise, 33);
     });
 
     test('Large ₹10,00,000 loan computes accurately without integer overflow', () {
       // Principal: ₹10,00,000 = 100,000,000 paise
-      // 30 days @ 100 bps
-      // Formula: (100000000 * 100 * 12 * 30 + 1825000) / 3650000
-      // Numerator: 3,600,000,000,000
-      // 3600000000000 / 3650000 = 986301 paise = ₹9,863.01
+      // 30 days @ 100 bps (1% monthly = ₹10,000 / month = 1,000,000 paise)
       final interest = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 100000000,
         monthlyBps: 100,
         days: 30,
       );
 
-      expect(interest, 986301);
+      expect(interest, 1000000); // Exactly ₹10,000.00
     });
 
     test('1-paisa rounding edge case with ROUND_HALF_UP', () {
       // Small principal: ₹100 (10,000 paise), 1 day @ 100 bps
-      // Numerator = 10,000 * 100 * 12 * 1 = 12,000,000
-      // 12,000,000 / 3,650,000 = 3.287 -> rounds to 3 paise
+      // (10,000 * 100 * 1 + 150000) / 300000 = 1,150,000 / 300000 = 3.83 -> rounds to 3 paise
       final interest = InterestCalculator.calculateReducingInterestPaise(
         principalPaise: 10000,
         monthlyBps: 100,
@@ -69,13 +92,5 @@ void main() {
       final elapsed = InterestCalculator.calculateElapsedDays(d1, d2);
       expect(elapsed, 2);
     });
-
-    test('Same-day repayment produces 0 elapsed days', () {
-      final now = DateTime.utc(2026, 11, 12, 10, 0);
-      final laterToday = DateTime.utc(2026, 11, 12, 15, 30);
-      final elapsed = InterestCalculator.calculateElapsedDays(now, laterToday);
-      expect(elapsed, 0);
-    });
   });
 }
-

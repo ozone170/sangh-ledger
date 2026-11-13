@@ -3,12 +3,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import '../../core/localization/locale_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
 import '../../domain/services/backup_service.dart';
 import '../../domain/services/google_drive_backup_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../backup/restore_backup_dialog.dart';
 
 final backupServiceProvider = Provider<BackupService>((ref) {
   return BackupService();
@@ -23,13 +25,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isBackingUp = false;
-  bool _isRestoring = false;
   bool _isCloudSyncing = false;
 
   Map<String, dynamic>? _lastBackupInfo;
   bool _gDriveConnected = false;
   String? _gDriveEmail;
   DateTime? _gDriveLastSync;
+  String? _customFolderPath;
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final connected = await gDriveService.isConnected();
     final email = await gDriveService.getConnectedEmail();
     final lastSync = await gDriveService.getLastSyncDate();
+    final folder = await backupService.getCustomBackupFolderPath();
 
     if (mounted) {
       setState(() {
@@ -52,7 +55,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _gDriveConnected = connected;
         _gDriveEmail = email;
         _gDriveLastSync = lastSync;
+        _customFolderPath = folder;
       });
+    }
+  }
+
+  void _changeBackupFolder() async {
+    final selectedDirectory = await FilePicker.getDirectoryPath();
+    if (selectedDirectory != null && selectedDirectory.isNotEmpty) {
+      final backupDir = Directory(p.join(selectedDirectory, 'SanghLedger_Backups'));
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+      final backupService = ref.read(backupServiceProvider);
+      await backupService.setCustomBackupFolderPath(backupDir.path);
+      await _loadBackupMetadata();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup folder updated: ${backupDir.path}'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+      }
     }
   }
 
@@ -208,74 +233,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _restoreBackup(BuildContext context) async {
+  void _connectGoogleDrive(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
-
-    if (files.isEmpty || files.first.path == null) return;
-    final backupFile = File(files.first.path!);
-
-    if (!context.mounted) return;
-    final passwordController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Restore Encrypted Backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('File: ${backupFile.path.split(Platform.pathSeparator).last}'),
-            const SizedBox(height: 12),
-            const Text('Enter the Admin password that was used when creating this backup:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Admin Password *'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorCrimson),
-            onPressed: () {
-              if (passwordController.text.isNotEmpty) Navigator.of(ctx).pop(true);
-            },
-            child: const Text('Verify & Restore'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && passwordController.text.isNotEmpty) {
-      setState(() => _isRestoring = true);
-      try {
-        final backupService = ref.read(backupServiceProvider);
-        await backupService.restoreBackup(
-          backupZipFile: backupFile,
-          adminPassword: passwordController.text,
-        );
+    try {
+      final gDriveService = ref.read(googleDriveBackupServiceProvider);
+      final email = await gDriveService.signInAndBindAccount();
+      if (email != null) {
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Database successfully verified and restored!'),
-            backgroundColor: AppColors.successGreen,
-          ),
+          SnackBar(content: Text('Google Drive connected: $email'), backgroundColor: AppColors.successGreen),
         );
         await _loadBackupMetadata();
-      } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Restore failed: $e'), backgroundColor: AppColors.errorCrimson),
-        );
-      } finally {
-        if (mounted) setState(() => _isRestoring = false);
+        return;
       }
+    } catch (_) {}
+    if (context.mounted) {
+      _connectGoogleDriveDialog(context);
     }
+  }
+
+  void _restoreBackup(BuildContext context) async {
+    await RestoreBackupDialog.show(context);
+    await _loadBackupMetadata();
   }
 
   @override
@@ -335,6 +313,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.folder_shared, color: AppColors.primaryNavy, size: 16),
+                            const SizedBox(width: 6),
+                            const Text('Backup Folder:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const Spacer(),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              icon: const Icon(Icons.edit, size: 14),
+                              label: const Text('Change Folder', style: TextStyle(fontSize: 12)),
+                              onPressed: _changeBackupFolder,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _customFolderPath ?? 'Default app storage (/SanghLedger_Backups)',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   if (_lastBackupInfo != null) ...[
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -380,7 +394,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     children: [
                       Expanded(
                         child: PrimaryButton(
-                          text: l10n.backup,
+                          text: 'Backup to Device Now',
                           icon: Icons.backup,
                           isLoading: _isBackingUp,
                           onPressed: () => _createBackup(context),
@@ -391,7 +405,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         child: SecondaryButton(
                           text: l10n.restore,
                           icon: Icons.restore,
-                          isLoading: _isRestoring,
                           onPressed: () => _restoreBackup(context),
                         ),
                       ),
@@ -475,7 +488,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     SecondaryButton(
                       text: 'Connect Google Drive',
                       icon: Icons.add_to_drive,
-                      onPressed: () => _connectGoogleDriveDialog(context),
+                      onPressed: () => _connectGoogleDrive(context),
                     ),
                   ],
                 ],
@@ -493,7 +506,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _InfoRow('Package', 'in.sanghledger.app'),
                   _InfoRow('Storage Mode', '100% Offline (SQLCipher 256-bit)'),
                   _InfoRow('Max Active Members', '100 Members (SGH001–SGH100)'),
-                  _InfoRow('Interest Basis', 'Daily Reducing Balance (365 days)'),
+                  _InfoRow('Interest Basis', 'Daily Reducing Balance (30-day month convention)'),
                   _InfoRow('Timezone', 'Asia/Kolkata (UTC+05:30)'),
                 ],
               ),
