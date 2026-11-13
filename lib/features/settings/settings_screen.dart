@@ -14,6 +14,7 @@ import '../../domain/services/backup_service.dart';
 import '../../domain/services/google_drive_backup_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../backup/restore_backup_dialog.dart';
+import 'privacy_policy_dialog.dart';
 
 final backupServiceProvider = Provider<BackupService>((ref) {
   return BackupService();
@@ -749,7 +750,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('App Identity & Constraints', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('App Identity & Compliance', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Card(
             child: Padding(
@@ -758,9 +759,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   _InfoRow('Package', 'in.sanghledger.app'),
                   _InfoRow('Storage Mode', '100% Offline (SQLCipher 256-bit)'),
+                  _InfoRow('Developer', 'OZONE (ozoneadi170@gmail.com)'),
                   _InfoRow('Max Active Members', '100 Members (SGH001–SGH100)'),
                   _InfoRow('Interest Basis', 'Daily Reducing Balance (30-day month convention)'),
                   _InfoRow('Timezone', 'Asia/Kolkata (UTC+05:30)'),
+                  const Divider(height: 24),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.financialTeal),
+                    title: const Text('Privacy Policy / ಗೌಪ್ಯತಾ ನೀತಿ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Offline-first & Google Drive Limited Use Policy', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                    onTap: () => PrivacyPolicyDialog.show(context),
+                  ),
                 ],
               ),
             ),

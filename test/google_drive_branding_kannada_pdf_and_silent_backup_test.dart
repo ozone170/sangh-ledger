@@ -211,5 +211,23 @@ void main() {
 
       tempDir.deleteSync(recursive: true);
     });
+
+    test('PRIVACY.md exists in root and satisfies Google OAuth Limited Use Compliance', () {
+      final privacyFile = File('PRIVACY.md');
+      expect(privacyFile.existsSync(), isTrue, reason: 'PRIVACY.md must exist in root directory');
+      
+      final content = privacyFile.readAsStringSync();
+      expect(content, contains('in.sanghledger.app'));
+      expect(content, contains('ozoneadi170@gmail.com'));
+      expect(content, contains('https://www.googleapis.com/auth/drive.file'));
+      expect(content, contains('Google API Services User Data Policy'));
+      expect(content, contains('Limited Use'));
+      expect(content, contains('SanghLedger_Backups'));
+      expect(content, contains('SQLCipher'));
+      expect(content, contains('AES-256-GCM'));
+      expect(content, contains('BiometricPrompt'));
+      expect(content, contains('https://myaccount.google.com/permissions'));
+      expect(content, contains('OZONE'));
+    });
   });
 }
