@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/auto_backup_coordinator.dart';
 
 class TransactionItem {
   final String id;
@@ -267,5 +268,6 @@ class TransactionRepository {
         'created_at': now.toIso8601String(),
       });
     });
+    AutoBackupCoordinator.triggerSilentBackup();
   }
 }

@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/navigation/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'domain/services/auto_backup_coordinator.dart';
 import 'l10n/app_localizations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  AutoBackupCoordinator();
   runApp(
     const ProviderScope(
       child: SanghLedgerApp(),

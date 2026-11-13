@@ -2,6 +2,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/entities/member.dart';
+import '../../domain/services/auto_backup_coordinator.dart';
 
 class MemberWithBalance {
   final Member member;
@@ -54,7 +55,7 @@ class MemberRepository {
     const uuid = Uuid();
     final now = DateTime.now();
 
-    return await db.transaction<Member>((txn) async {
+    final member = await db.transaction<Member>((txn) async {
       // Dynamically fetch or seed valid organization id
       final orgId = await _db.getActiveOrganizationId(txn);
 
@@ -94,6 +95,8 @@ class MemberRepository {
 
       return member;
     });
+    AutoBackupCoordinator.triggerSilentBackup();
+    return member;
   }
 
   /// Updates member details

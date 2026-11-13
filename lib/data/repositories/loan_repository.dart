@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/entities/loan.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/auto_backup_coordinator.dart';
 
 class LoanRepaymentItem {
   final String id;
@@ -150,7 +151,7 @@ class LoanRepository {
     final now = DateTime.now();
     final disburseDate = disbursementDate ?? now;
 
-    return await db.transaction<String>((txn) async {
+    final receipt = await db.transaction<String>((txn) async {
       final loanResults = await txn.query('loans', where: 'id = ?', whereArgs: [loanId], limit: 1);
       if (loanResults.isEmpty) throw StateError('Loan not found');
       final loanData = loanResults.first;
@@ -230,6 +231,8 @@ class LoanRepository {
 
       return receiptNumber;
     });
+    AutoBackupCoordinator.triggerSilentBackup();
+    return receipt;
   }
 
   /// Fetches all loans

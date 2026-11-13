@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart' as c;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -17,6 +18,7 @@ class BackupManifest {
   final String saltBase64;
   final String databaseSha256;
   final String backupDate;
+  final bool hasLogo;
 
   const BackupManifest({
     required this.appVersion,
@@ -25,6 +27,7 @@ class BackupManifest {
     required this.saltBase64,
     required this.databaseSha256,
     required this.backupDate,
+    this.hasLogo = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -34,23 +37,28 @@ class BackupManifest {
         'saltBase64': saltBase64,
         'databaseSha256': databaseSha256,
         'backupDate': backupDate,
+        'hasLogo': hasLogo,
       };
 
   factory BackupManifest.fromJson(Map<String, dynamic> json) => BackupManifest(
-        appVersion: json['appVersion'] as String,
-        schemaVersion: json['schemaVersion'] as int,
-        organizationId: json['organizationId'] as String,
+        appVersion: json['appVersion'] as String? ?? '1.0.0',
+        schemaVersion: json['schemaVersion'] as int? ?? 1,
+        organizationId: json['organizationId'] as String? ?? 'sangh_primary',
         saltBase64: json['saltBase64'] as String,
         databaseSha256: json['databaseSha256'] as String,
         backupDate: json['backupDate'] as String,
+        hasLogo: json['hasLogo'] as bool? ?? false,
       );
 }
 
 class BackupService {
   final AppDatabase _db;
+  final FlutterSecureStorage _storage;
   static const uuid = Uuid();
 
-  BackupService({AppDatabase? db}) : _db = db ?? AppDatabase();
+  BackupService({AppDatabase? db, FlutterSecureStorage? storage})
+      : _db = db ?? AppDatabase(),
+        _storage = storage ?? const FlutterSecureStorage();
 
   /// Derives a 256-bit encryption key from the admin password and salt
   static Future<Uint8List> deriveKeyFromPassword(String password, Uint8List salt) async {
@@ -193,16 +201,15 @@ class BackupService {
   }
 
   /// Creates a space-efficient encrypted zip backup of the active database
-  /// with WAL checkpointing, VACUUM compaction, and 2-day rolling retention.
-  Future<File> createBackup({required String adminPassword}) async {
+  /// with WAL checkpointing, VACUUM compaction, sangh_logo.png inclusion,
+  /// and 2-day rolling retention.
+  Future<File> createBackup({String? adminPassword, bool isAuto = false}) async {
     // 0. Checkpoint WAL and VACUUM SQLite database before archiving for space efficiency
     try {
       final db = await _db.database;
       await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE);');
       await db.execute('VACUUM;');
-    } catch (_) {
-      // Continue gracefully if vacuum cannot run in active context
-    }
+    } catch (_) {}
 
     final dbPath = await _db.getDatabasePath();
     final dbFile = File(dbPath);
@@ -213,14 +220,40 @@ class BackupService {
     final dbBytes = await dbFile.readAsBytes();
     final dbSha256 = sha256.convert(dbBytes).toString();
 
-    // 1. Generate salt and derive encryption key
-    final salt = CryptoUtils.generateRandomBytes(16);
-    final key256 = await deriveKeyFromPassword(adminPassword, salt);
+    // 1. Resolve password
+    String effectivePassword = adminPassword ?? '';
+    if (effectivePassword.isEmpty) {
+      try {
+        final stored = await _storage.read(key: 'admin_backup_password');
+        if (stored != null && stored.isNotEmpty) {
+          effectivePassword = stored;
+        }
+      } catch (_) {}
+    }
+    if (effectivePassword.isEmpty) {
+      effectivePassword = 'sangh_offline_ledger_backup';
+    }
 
-    // 2. Encrypt database bytes using AES-256-GCM
+    // 2. Generate salt and derive encryption key
+    final salt = CryptoUtils.generateRandomBytes(16);
+    final key256 = await deriveKeyFromPassword(effectivePassword, salt);
+
+    // 3. Encrypt database bytes using AES-256-GCM
     final encryptedDbBytes = await CryptoUtils.encryptAesGcm(dbBytes, key256);
 
-    // 3. Create manifest
+    // Check for logo
+    bool hasLogo = false;
+    Uint8List? logoBytes;
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final logoFile = File(p.join(docDir.path, 'sangh_logo.png'));
+      if (await logoFile.exists()) {
+        logoBytes = await logoFile.readAsBytes();
+        hasLogo = true;
+      }
+    } catch (_) {}
+
+    // 4. Create manifest
     final now = DateTime.now();
     final manifest = BackupManifest(
       appVersion: '1.0.0',
@@ -229,13 +262,17 @@ class BackupService {
       saltBase64: base64.encode(salt),
       databaseSha256: dbSha256,
       backupDate: now.toIso8601String(),
+      hasLogo: hasLogo,
     );
 
-    // 4. Archive into zip
+    // 5. Archive into zip
     final archive = Archive();
     final manifestJson = jsonEncode(manifest.toJson());
     archive.addFile(ArchiveFile('manifest.json', manifestJson.length, utf8.encode(manifestJson)));
     archive.addFile(ArchiveFile('database.enc', encryptedDbBytes.length, encryptedDbBytes));
+    if (hasLogo && logoBytes != null) {
+      archive.addFile(ArchiveFile('sangh_logo.png', logoBytes.length, logoBytes));
+    }
 
     final zipEncoder = ZipEncoder();
     final zipData = zipEncoder.encode(archive);
@@ -248,7 +285,7 @@ class BackupService {
     final backupFile = File(p.join(backupDir.path, 'SanghLedger_Backup_${datePart}_$timePart.zip'));
     await backupFile.writeAsBytes(zipData);
 
-    // 5. Enforce 2-Day Rolling Retention Policy
+    // 6. Enforce 2-Day Rolling Retention Policy
     await enforceTwoDayRollingRetention(backupDir);
 
     // Record into backup history
@@ -259,7 +296,7 @@ class BackupService {
         'backup_path': backupFile.path,
         'backup_date': now.toIso8601String(),
         'checksum_sha256': sha256.convert(zipData).toString(),
-        'is_auto': 0,
+        'is_auto': isAuto ? 1 : 0,
         'status': 'SUCCESS',
         'created_at': now.toIso8601String(),
       });
@@ -284,7 +321,7 @@ class BackupService {
     final dbEncFile = archive.findFile('database.enc');
 
     if (manifestFile == null || dbEncFile == null) {
-      throw FormatException('Invalid backup archive structure: missing manifest or database.enc');
+      throw const FormatException('Invalid backup archive structure: missing manifest or database.enc');
     }
 
     // 1. Parse manifest
@@ -310,7 +347,17 @@ class BackupService {
       throw const FormatException('Database checksum mismatch: archive may be tampered or damaged');
     }
 
-    // 5. Atomic replacement: Close current DB connection, write to target path
+    // 5. Restore sangh_logo.png if included in archive
+    final logoFileInZip = archive.findFile('sangh_logo.png');
+    if (logoFileInZip != null) {
+      try {
+        final docDir = await getApplicationDocumentsDirectory();
+        final localLogo = File(p.join(docDir.path, 'sangh_logo.png'));
+        await localLogo.writeAsBytes(logoFileInZip.content as List<int>);
+      } catch (_) {}
+    }
+
+    // 6. Atomic replacement: Close current DB connection, write to target path
     await _db.close();
     final targetPath = await _db.getDatabasePath();
     final stagingFile = File('$targetPath.staging');
@@ -320,4 +367,3 @@ class BackupService {
     await stagingFile.rename(targetPath);
   }
 }
-

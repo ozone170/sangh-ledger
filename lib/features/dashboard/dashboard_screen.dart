@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/navigation/app_routes.dart';
@@ -5,6 +6,7 @@ import '../../core/providers/financial_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../l10n/app_localizations.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -14,15 +16,61 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final summaryAsync = ref.watch(dashboardSummaryProvider);
+    final orgAsync = ref.watch(organizationProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.dashboard),
+        titleSpacing: 0,
+        title: orgAsync.when(
+          data: (org) {
+            final sanghName = org?.name.isNotEmpty == true ? org!.name : 'Sangh';
+            final titleText = '$sanghName Ledger';
+            final logoPath = org?.logoPath;
+            final hasLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
+
+            return Row(
+              children: [
+                const SizedBox(width: 8),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white24,
+                  ),
+                  child: hasLogo
+                      ? ClipOval(
+                          child: Image.file(
+                            File(logoPath),
+                            width: 34,
+                            height: 34,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : const Icon(Icons.account_balance, size: 20, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    titleText,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+              ],
+            );
+          },
+          loading: () => Text(l10n.dashboard),
+          error: (e, s) => Text(l10n.dashboard),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(dashboardSummaryProvider),
+            onPressed: () {
+              ref.invalidate(dashboardSummaryProvider);
+              ref.invalidate(organizationProvider);
+            },
           ),
           IconButton(
             icon: const Icon(Icons.receipt_long),

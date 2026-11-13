@@ -2,11 +2,14 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../core/localization/locale_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../domain/services/backup_service.dart';
 import '../../domain/services/google_drive_backup_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -256,10 +259,122 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _loadBackupMetadata();
   }
 
+  Future<void> _updateLogo() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      );
+      if (result.isEmpty || result.first.path == null) return;
+
+      final sourceFile = File(result.first.path!);
+      final bytes = await sourceFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) throw Exception('Could not decode image file');
+
+      final resized = img.copyResize(decoded, width: 256, height: 256);
+      final pngBytes = img.encodePng(resized);
+
+      final docDir = await getApplicationDocumentsDirectory();
+      final logoFile = File(p.join(docDir.path, 'sangh_logo.png'));
+      await logoFile.writeAsBytes(pngBytes);
+
+      final repo = ref.read(organizationRepositoryProvider);
+      await repo.updateLogoPath(logoFile.path);
+      ref.invalidate(organizationProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sangh logo updated successfully!'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update logo: $e'),
+            backgroundColor: AppColors.errorCrimson,
+          ),
+        );
+      }
+    }
+  }
+
+  void _editOrganizationProfile(OrganizationInfo org) async {
+    final nameController = TextEditingController(text: org.name);
+    final addressController = TextEditingController(text: org.address);
+    final phoneController = TextEditingController(text: org.contactPhone);
+    final regNoController = TextEditingController(text: org.registrationNumber ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Sangh Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Sangh Name *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(labelText: 'Address *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Contact Phone *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: regNoController,
+                decoration: const InputDecoration(labelText: 'Registration Number (Optional)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final repo = ref.read(organizationRepositoryProvider);
+      await repo.updateProfile(
+        name: nameController.text.trim(),
+        address: addressController.text.trim(),
+        contactPhone: phoneController.text.trim(),
+        registrationNumber: regNoController.text.trim().isEmpty ? null : regNoController.text.trim(),
+      );
+      ref.invalidate(organizationProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sangh profile updated successfully!'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final currentLocale = ref.watch(localeProvider);
+    final orgAsync = ref.watch(organizationProvider);
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
     return Scaffold(
@@ -267,6 +382,114 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Organization Profile & Branding Card
+          Text('Organization Profile & Branding', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          orgAsync.when(
+            data: (org) {
+              if (org == null) return const SizedBox.shrink();
+              final hasLogo = org.logoPath != null && org.logoPath!.isNotEmpty && File(org.logoPath!).existsSync();
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: _updateLogo,
+                            child: Stack(
+                              children: [
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.primaryNavy.withValues(alpha: 0.1),
+                                    border: Border.all(color: AppColors.primaryNavy, width: 1.5),
+                                  ),
+                                  child: hasLogo
+                                      ? ClipOval(
+                                          child: Image.file(
+                                            File(org.logoPath!),
+                                            width: 60,
+                                            height: 60,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                      : const Icon(Icons.business, size: 30, color: AppColors.primaryNavy),
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.primaryNavy,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.camera_alt, size: 12, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(org.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const SizedBox(height: 2),
+                                Text(org.address, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Phone: ${org.contactPhone}${org.registrationNumber != null ? ' • Reg: ${org.registrationNumber}' : ''}',
+                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                minimumSize: Size.zero,
+                              ),
+                              icon: const Icon(Icons.upload, size: 15),
+                              label: Text(hasLogo ? 'Change Logo' : 'Upload Logo', style: const TextStyle(fontSize: 12)),
+                              onPressed: _updateLogo,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                minimumSize: Size.zero,
+                              ),
+                              icon: const Icon(Icons.edit, size: 15),
+                              label: const Text('Edit Details', style: TextStyle(fontSize: 12)),
+                              onPressed: () => _editOrganizationProfile(org),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, s) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 24),
           Text('General & Language', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Card(
@@ -284,6 +507,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           Text('Encrypted Backup & Recovery', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
+
+          // Passive Auto-Backup Status Indicator
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.successGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.successGreen.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: AppColors.successGreen, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _lastBackupInfo != null
+                        ? 'Auto-Backup Active • Last synced: ${dateFormat.format(_lastBackupInfo!['modifiedAt'] as DateTime)}'
+                        : 'Auto-Backup Active • Ready for transactions',
+                    style: const TextStyle(
+                      color: AppColors.successGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),

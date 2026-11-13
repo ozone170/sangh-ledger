@@ -2,6 +2,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/auto_backup_coordinator.dart';
 
 class SavingsRepository {
   final AppDatabase _db;
@@ -44,7 +45,7 @@ class SavingsRepository {
     final db = await _db.database;
     final transactionDate = date ?? DateTime.now();
 
-    return await db.transaction<String>((txn) async {
+    final receipt = await db.transaction<String>((txn) async {
       // 1. Validate active member
       final memberResults = await txn.query(
         'members',
@@ -100,6 +101,8 @@ class SavingsRepository {
 
       return receiptNumber;
     });
+    AutoBackupCoordinator.triggerSilentBackup();
+    return receipt;
   }
 
   /// Records an authorized savings withdrawal with strict available balance validation
@@ -117,7 +120,7 @@ class SavingsRepository {
     final db = await _db.database;
     final transactionDate = date ?? DateTime.now();
 
-    return await db.transaction<String>((txn) async {
+    final receipt = await db.transaction<String>((txn) async {
       // 1. Validate active member
       final memberResults = await txn.query(
         'members',
@@ -189,6 +192,8 @@ class SavingsRepository {
 
       return receiptNumber;
     });
+    AutoBackupCoordinator.triggerSilentBackup();
+    return receipt;
   }
 
   /// Returns total savings liabilities across all active members from live journal lines (2001)

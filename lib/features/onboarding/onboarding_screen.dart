@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -43,6 +45,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   late final TextEditingController _recoveryQuestionController;
   late final TextEditingController _recoveryAnswerController;
   bool _biometricOptIn = false;
+  String? _logoPath;
+  bool _isCompressingLogo = false;
 
   // Step 6 Backup Setup state
   String? _gDriveEmail;
@@ -54,6 +58,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.initState();
     final draft = ref.read(onboardingProvider);
     _currentStep = draft.currentStep;
+    _logoPath = draft.logoPath;
     if (_currentStep > 0 || draft.sanghName.isNotEmpty) {
       _showChoice = false;
     }
@@ -72,6 +77,56 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _recoveryQuestionController = TextEditingController(text: draft.recoveryQuestion);
     _recoveryAnswerController = TextEditingController(text: draft.recoveryAnswer);
     _biometricOptIn = draft.biometricEnabled;
+  }
+
+  Future<void> _pickAndCompressLogo() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      );
+      if (result.isEmpty || result.first.path == null) return;
+
+      setState(() => _isCompressingLogo = true);
+      final sourceFile = File(result.first.path!);
+      final bytes = await sourceFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('Could not decode selected image file');
+      }
+
+      // Resize to max 256x256 while keeping aspect ratio
+      final resized = img.copyResize(decoded, width: 256, height: 256);
+      final pngBytes = img.encodePng(resized);
+
+      final docDir = await getApplicationDocumentsDirectory();
+      final logoFile = File(p.join(docDir.path, 'sangh_logo.png'));
+      await logoFile.writeAsBytes(pngBytes);
+
+      setState(() {
+        _logoPath = logoFile.path;
+      });
+      _syncDraft();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sangh logo uploaded & compressed successfully!'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to process logo: $e'),
+            backgroundColor: AppColors.errorCrimson,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCompressingLogo = false);
+    }
   }
 
   @override
@@ -97,6 +152,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           address: _addressController.text.trim(),
           contactPhone: _phoneController.text.trim(),
           registrationNumber: _regNoController.text.trim().isEmpty ? null : _regNoController.text.trim(),
+          logoPath: _logoPath,
           username: _usernameController.text.trim(),
           password: _passwordController.text,
           pin: _pinController.text.trim().isEmpty ? null : _pinController.text.trim(),
@@ -168,10 +224,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           SnackBar(content: Text('Google Drive connected: $email'), backgroundColor: AppColors.successGreen),
         );
       }
+    } on GoogleDriveAuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: AppColors.errorCrimson,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google Sign-In failed: $e'), backgroundColor: AppColors.errorCrimson),
+          SnackBar(
+            content: Text('Google Sign-In failed: $e'),
+            backgroundColor: AppColors.errorCrimson,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     } finally {
@@ -392,7 +462,51 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Text('Step 1: Organization Profile', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Text('Enter your Sangh name and primary contact details.', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+
+            // Logo Upload Section
+            Center(
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: _pickAndCompressLogo,
+                    child: Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.primaryNavy, width: 2),
+                      ),
+                      child: _isCompressingLogo
+                          ? const Center(child: CircularProgressIndicator())
+                          : _logoPath != null && File(_logoPath!).existsSync()
+                              ? ClipOval(
+                                  child: Image.file(
+                                    File(_logoPath!),
+                                    width: 90,
+                                    height: 90,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : const Icon(Icons.add_photo_alternate_outlined, size: 40, color: AppColors.primaryNavy),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    icon: const Icon(Icons.upload, size: 16),
+                    label: Text(_logoPath != null ? 'Change Sangh Logo' : 'Upload Sangh Logo'),
+                    onPressed: _pickAndCompressLogo,
+                  ),
+                  const Text(
+                    'Recommended: Square PNG/JPG (Max 256x256, auto-compressed)',
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             TextFormField(
               controller: _sanghNameController,
               decoration: const InputDecoration(labelText: 'Sangh Name *', prefixIcon: Icon(Icons.business)),
@@ -713,13 +827,43 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
+
+          // Mandatory Dual Backup Binding Helper Banner
+          if (_gDriveEmail == null || _selectedLocalFolder == null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warningAmber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.5)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: AppColors.warningAmber, size: 22),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Both Google Drive and a Device Backup Folder must be connected before initializing your Sangh.',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           PrimaryButton(
             text: 'Initialize & Launch Sangh Ledger',
             icon: Icons.rocket_launch,
             isLoading: _isCommitting,
-            onPressed: _completeSetup,
+            onPressed: (_gDriveEmail != null &&
+                    _gDriveEmail!.isNotEmpty &&
+                    _selectedLocalFolder != null &&
+                    _selectedLocalFolder!.isNotEmpty)
+                ? _completeSetup
+                : null,
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/auto_backup_coordinator.dart';
 import '../../domain/services/interest_calculator.dart';
 
 class RepaymentAllocation {
@@ -153,7 +154,7 @@ class RepaymentRepository {
     final db = await _db.database;
     final now = DateTime.now();
 
-    return await db.transaction<String>((txn) async {
+    final receipt = await db.transaction<String>((txn) async {
       // 1. Fetch loan details
       final loanResults = await txn.query('loans', where: 'id = ?', whereArgs: [loanId], limit: 1);
       if (loanResults.isEmpty) throw StateError('Loan not found');
@@ -278,6 +279,8 @@ class RepaymentRepository {
 
       return receiptNumber;
     });
+    AutoBackupCoordinator.triggerSilentBackup();
+    return receipt;
   }
 
   /// Fetches an immediate calculation summary for a loan as of a specific date,

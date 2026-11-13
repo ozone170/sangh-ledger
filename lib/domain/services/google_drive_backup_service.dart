@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -24,6 +25,16 @@ class GoogleAuthClient extends http.BaseClient {
   }
 }
 
+class GoogleDriveAuthException implements Exception {
+  final String message;
+  final dynamic originalError;
+
+  const GoogleDriveAuthException(this.message, {this.originalError});
+
+  @override
+  String toString() => message;
+}
+
 class GoogleDriveBackupService {
   final AppDatabase _db;
   final GoogleSignIn _googleSignIn;
@@ -32,19 +43,21 @@ class GoogleDriveBackupService {
       : _db = db ?? AppDatabase(),
         _googleSignIn = googleSignIn ??
             GoogleSignIn(
-              scopes: [
+              scopes: const [
                 'email',
-                drive.DriveApi.driveFileScope,
+                'https://www.googleapis.com/auth/drive.file',
               ],
             );
 
   static const _keyConnected = 'gdrive_connected';
   static const _keyAccountEmail = 'gdrive_account_email';
   static const _keyAccountId = 'gdrive_account_id';
+  static const _keyAccountName = 'gdrive_account_name';
   static const _keyAutoBackup = 'gdrive_auto_backup';
   static const _keyLastSyncDate = 'gdrive_last_sync_date';
   static const _keyLastSyncStatus = 'gdrive_last_sync_status';
   static const _keyFolderId = 'gdrive_backup_folder_id';
+  static const _keyPendingCloudSync = 'gdrive_pending_cloud_sync';
 
   Future<String?> _getSetting(String key) async {
     try {
@@ -83,6 +96,10 @@ class GoogleDriveBackupService {
     return await _getSetting(_keyAccountEmail);
   }
 
+  Future<String?> getConnectedDisplayName() async {
+    return await _getSetting(_keyAccountName);
+  }
+
   Future<bool> isAutoBackupEnabled() async {
     final val = await _getSetting(_keyAutoBackup);
     return val == 'true';
@@ -104,6 +121,15 @@ class GoogleDriveBackupService {
     return await _getSetting(_keyLastSyncStatus);
   }
 
+  Future<bool> hasPendingCloudSync() async {
+    final val = await _getSetting(_keyPendingCloudSync);
+    return val == 'true';
+  }
+
+  Future<void> setPendingCloudSync(bool pending) async {
+    await _setSetting(_keyPendingCloudSync, pending ? 'true' : 'false');
+  }
+
   /// Triggers the native Google Account chooser and permanently binds the account
   Future<String?> signInAndBindAccount() async {
     try {
@@ -115,6 +141,9 @@ class GoogleDriveBackupService {
       await _setSetting(_keyConnected, 'true');
       await _setSetting(_keyAccountEmail, account.email);
       await _setSetting(_keyAccountId, account.id);
+      if (account.displayName != null && account.displayName!.isNotEmpty) {
+        await _setSetting(_keyAccountName, account.displayName!);
+      }
       await _setSetting(_keyAutoBackup, 'true');
 
       // Initialize/find SanghLedger_Backups folder
@@ -123,13 +152,37 @@ class GoogleDriveBackupService {
       } catch (_) {}
 
       return account.email;
+    } on PlatformException catch (e) {
+      final msg = e.message ?? '';
+      if (e.code == 'network_error' ||
+          msg.contains('r2: 7') ||
+          msg.contains('7') ||
+          e.code == '7') {
+        throw GoogleDriveAuthException(
+          'Google Drive sign-in requires an active internet connection and valid Google Cloud OAuth SHA-1 registration for in.sanghledger.app. Please check internet connection and retry.',
+          originalError: e,
+        );
+      }
+      throw GoogleDriveAuthException(
+        'Google Drive sign-in failed (${e.code}): $msg',
+        originalError: e,
+      );
     } catch (e) {
-      // If native Google Play Services is absent, prompt or handle gracefully
-      rethrow;
+      if (e is GoogleDriveAuthException) rethrow;
+      throw GoogleDriveAuthException('Google Sign-In failed: $e', originalError: e);
     }
   }
 
-  /// Manually binds an email account
+  /// Silently attempts authentication if already bound
+  Future<GoogleSignInAccount?> signInSilently() async {
+    try {
+      return await _googleSignIn.signInSilently();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Manually binds an email account (e.g. testing or manual fallback)
   Future<bool> connectAccount(String email) async {
     if (email.trim().isEmpty || !email.contains('@')) {
       throw ArgumentError('Invalid email address for Google Drive');
@@ -148,8 +201,10 @@ class GoogleDriveBackupService {
     await _setSetting(_keyConnected, 'false');
     await _setSetting(_keyAccountEmail, '');
     await _setSetting(_keyAccountId, '');
+    await _setSetting(_keyAccountName, '');
     await _setSetting(_keyAutoBackup, 'false');
     await _setSetting(_keyFolderId, '');
+    await _setSetting(_keyPendingCloudSync, 'false');
   }
 
   /// Gets authenticated DriveApi instance
@@ -197,7 +252,8 @@ class GoogleDriveBackupService {
   }
 
   /// Uploads encrypted backup archive to Google Drive SanghLedger_Backups folder
-  /// and applies 2-day rolling retention policy.
+  /// and deletes all older backup files on Drive once the new upload is verified
+  /// (retaining only the latest cloud copy to save Drive space).
   Future<bool> syncBackup(File localBackupZipFile) async {
     if (!await localBackupZipFile.exists()) {
       throw ArgumentError('Local backup archive does not exist to sync');
@@ -219,15 +275,18 @@ class GoogleDriveBackupService {
           ..parents = [folderId];
 
         final media = drive.Media(localBackupZipFile.openRead(), localBackupZipFile.lengthSync());
-        await driveApi.files.create(driveFile, uploadMedia: media);
+        final uploaded = await driveApi.files.create(driveFile, uploadMedia: media);
 
-        // Apply 2-day rolling retention on Drive folder
-        await _enforceDriveRollingRetention(driveApi, folderId);
+        // Delete older backups on Google Drive (retain only latest verified cloud copy)
+        if (uploaded.id != null) {
+          await _pruneOlderDriveBackups(driveApi, folderId, keepFileId: uploaded.id!);
+        }
       }
 
       final now = DateTime.now();
       await _setSetting(_keyLastSyncDate, now.toIso8601String());
       await _setSetting(_keyLastSyncStatus, 'SUCCESS');
+      await setPendingCloudSync(false);
 
       try {
         final db = await _db.database;
@@ -245,16 +304,18 @@ class GoogleDriveBackupService {
       return true;
     } catch (e) {
       await _setSetting(_keyLastSyncStatus, 'FAILED');
+      await setPendingCloudSync(true);
       rethrow;
     }
   }
 
-  /// Enforces 2-day rolling retention inside Google Drive folder
-  Future<void> _enforceDriveRollingRetention(drive.DriveApi driveApi, String folderId) async {
+  /// Prunes older backup archives in Google Drive SanghLedger_Backups folder,
+  /// keeping only the newly uploaded file to conserve space.
+  Future<void> _pruneOlderDriveBackups(drive.DriveApi driveApi, String folderId, {required String keepFileId}) async {
     try {
       final list = await driveApi.files.list(
         q: "'$folderId' in parents and trashed = false",
-        orderBy: 'name desc',
+        orderBy: 'createdTime desc',
         spaces: 'drive',
         $fields: 'files(id, name, createdTime)',
       );
@@ -262,26 +323,13 @@ class GoogleDriveBackupService {
       final files = list.files;
       if (files == null || files.isEmpty) return;
 
-      final dateMap = <String, List<drive.File>>{};
-      final regExp = RegExp(r'SanghLedger_Backup_(\d{8})');
-
       for (final f in files) {
-        final name = f.name ?? '';
-        final match = regExp.firstMatch(name);
-        final dateKey = match?.group(1) ?? (f.createdTime?.toIso8601String().substring(0, 10).replaceAll('-', '') ?? '00000000');
-        dateMap.putIfAbsent(dateKey, () => []).add(f);
-      }
-
-      final sortedDates = dateMap.keys.toList()..sort((a, b) => b.compareTo(a));
-      if (sortedDates.length > 2) {
-        final datesToDelete = sortedDates.sublist(2);
-        for (final date in datesToDelete) {
-          for (final f in dateMap[date] ?? []) {
-            if (f.id != null) {
-              try {
-                await driveApi.files.delete(f.id!);
-              } catch (_) {}
-            }
+        if (f.id != null && f.id != keepFileId) {
+          final name = f.name ?? '';
+          if (name.startsWith('SanghLedger_Backup_') && name.endsWith('.zip')) {
+            try {
+              await driveApi.files.delete(f.id!);
+            } catch (_) {}
           }
         }
       }

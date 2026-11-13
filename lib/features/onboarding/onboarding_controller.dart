@@ -180,6 +180,11 @@ class OnboardingNotifier extends StateNotifier<OnboardingDraft> {
       });
     });
 
+    // Store admin password securely for zero-touch silent auto-backups
+    try {
+      await _storage.write(key: 'admin_backup_password', value: state.password);
+    } catch (_) {}
+
     // Clear draft after successful commit
     await _storage.delete(key: _draftKey);
   }
