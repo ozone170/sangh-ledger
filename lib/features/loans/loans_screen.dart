@@ -10,6 +10,9 @@ import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/loan_repository.dart';
 import '../../domain/entities/loan.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../data/repositories/member_repository.dart';
+import '../../data/repositories/transaction_repository.dart';
+import '../transactions/send_message_bottom_sheet.dart';
 import '../../l10n/app_localizations.dart';
 import '../members/members_controller.dart';
 
@@ -237,15 +240,29 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
     if (confirm == true) {
       try {
         final repo = ref.read(loanRepositoryProvider);
-        await repo.disburseLoan(loanId: loan.id, paymentMode: mode);
+        final rcp = await repo.disburseLoan(loanId: loan.id, paymentMode: mode);
         invalidateFinancialProviders(ref, memberId: loan.memberId, loanId: loan.id);
+
+        final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
+        final member = await MemberRepository().getMemberById(loan.memberId);
+
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(l10n.loanDisbursedSuccess),
-              backgroundColor: AppColors.successGreen,
-            ),
-          );
+          if (txItem != null) {
+            PostTransactionSuccessDialog.show(
+              context,
+              transaction: txItem,
+              memberPhone: member?.phone,
+              updatedBalancePaise: loan.principalPaise,
+              balanceLabel: 'Loan Principal / ಸಾಲದ ಮೊತ್ತ:',
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.loanDisbursedSuccess),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
         }
       } catch (e) {
         if (context.mounted) {

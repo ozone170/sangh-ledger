@@ -86,6 +86,16 @@
   "repaymentHistory": "Repayment History",
   "noRepaymentsYet": "No repayments recorded yet",
   "loanDisbursedSuccess": "Loan successfully disbursed!",
-  "disbursementReversedSuccess": "Disbursement successfully reversed and ledger balanced!"
+  "disbursementReversedSuccess": "Disbursement successfully reversed and ledger balanced!",
+  "sendMessage": "Send Message",
+  "transactionSuccess": "Transaction Recorded Successfully",
+  "done": "Done",
+  "shareViaWhatsApp": "Share via WhatsApp",
+  "sendSms": "Send SMS",
+  "sharePdfReceipt": "Share PDF Receipt",
+  "shareOtherApps": "Share via Other Apps",
+  "messagePreview": "Receipt Message Preview",
+  "updatedSavingsBalance": "Updated Savings Balance",
+  "remainingLoanPrincipal": "Remaining Loan Principal"
 }
 

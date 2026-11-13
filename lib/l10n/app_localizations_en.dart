@@ -273,4 +273,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get disbursementReversedSuccess =>
       'Disbursement successfully reversed and ledger balanced!';
+
+  @override
+  String get sendMessage => 'Send Message';
+
+  @override
+  String get transactionSuccess => 'Transaction Recorded Successfully';
+
+  @override
+  String get done => 'Done';
+
+  @override
+  String get shareViaWhatsApp => 'Share via WhatsApp';
+
+  @override
+  String get sendSms => 'Send SMS';
+
+  @override
+  String get sharePdfReceipt => 'Share PDF Receipt';
+
+  @override
+  String get shareOtherApps => 'Share via Other Apps';
+
+  @override
+  String get messagePreview => 'Receipt Message Preview';
+
+  @override
+  String get updatedSavingsBalance => 'Updated Savings Balance';
+
+  @override
+  String get remainingLoanPrincipal => 'Remaining Loan Principal';
 }

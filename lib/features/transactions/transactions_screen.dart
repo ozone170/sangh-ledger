@@ -7,10 +7,11 @@ import '../../core/ui/inputs.dart';
 import '../../core/ui/list_items.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/pdf_receipt_service.dart';
-import '../../domain/services/receipt_sharing_service.dart';
 import '../../l10n/app_localizations.dart';
+import 'send_message_bottom_sheet.dart';
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
   return TransactionRepository();
@@ -138,17 +139,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
+                      backgroundColor: AppColors.financialTeal,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    icon: const Icon(Icons.share),
-                    label: const Text('Share Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      ReceiptSharingService.showShareOptionsModal(
-                        context,
-                        transaction: tx,
-                      );
+                    icon: const Icon(Icons.send_rounded),
+                    label: Text(
+                      '${l10n.sendMessage} • ಸಂದೇಶ',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      final member = await MemberRepository().getMemberById(tx.memberId);
+                      if (context.mounted) {
+                        SendMessageBottomSheet.show(
+                          context,
+                          transaction: tx,
+                          memberPhone: member?.phone,
+                        );
+                      }
                     },
                   ),
                 ),

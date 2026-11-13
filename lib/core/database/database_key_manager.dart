@@ -7,10 +7,26 @@ class DatabaseKeyManager {
   final FlutterSecureStorage _storage;
 
   DatabaseKeyManager({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(
+                resetOnError: false,
+              ),
+            );
 
-  /// Retrieves the existing 256-bit key or securely generates and stores a new one
+  /// Retrieves the existing 256-bit key or securely generates and stores a new one,
+  /// with a retry-once fallback on transient Keystore initialization hiccups during cold boot.
   Future<String> getOrCreateEncryptionKey() async {
+    try {
+      return await _fetchOrGenerateKey();
+    } catch (_) {
+      // Retry once for transient Keystore initialization hiccups during cold boot
+      await Future.delayed(const Duration(milliseconds: 300));
+      return await _fetchOrGenerateKey();
+    }
+  }
+
+  Future<String> _fetchOrGenerateKey() async {
     final existingKey = await _storage.read(key: _keyName);
     if (existingKey != null && existingKey.isNotEmpty) {
       return existingKey;
@@ -24,10 +40,20 @@ class DatabaseKeyManager {
     return keyHex;
   }
 
-  /// Checks whether an encryption key already exists
+  /// Checks whether an encryption key already exists with retry-once fallback
   Future<bool> hasKey() async {
-    final key = await _storage.read(key: _keyName);
-    return key != null && key.isNotEmpty;
+    try {
+      final key = await _storage.read(key: _keyName);
+      return key != null && key.isNotEmpty;
+    } catch (_) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      final key = await _storage.read(key: _keyName);
+      return key != null && key.isNotEmpty;
+    }
+  }
+
+  /// Deletes the encryption key (used during hard database reset/re-initialization)
+  Future<void> deleteKey() async {
+    await _storage.delete(key: _keyName);
   }
 }
-

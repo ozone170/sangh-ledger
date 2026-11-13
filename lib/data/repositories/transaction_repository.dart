@@ -117,6 +117,39 @@ class TransactionRepository {
     }).toList();
   }
 
+  /// Fetches a single transaction by receipt number
+  Future<TransactionItem?> getTransactionByReceiptNumber(String receiptNumber) async {
+    final db = await _db.database;
+    final results = await db.rawQuery('''
+      SELECT 
+        t.*, 
+        m.member_code, 
+        m.full_name as member_name
+      FROM transactions t
+      JOIN members m ON t.member_id = m.id
+      WHERE t.receipt_number = ?
+      LIMIT 1
+    ''', [receiptNumber]);
+
+    if (results.isEmpty) return null;
+    final row = results.first;
+    return TransactionItem(
+      id: row['id'] as String,
+      organizationId: row['organization_id'] as String,
+      memberId: row['member_id'] as String,
+      memberCode: row['member_code'] as String,
+      memberName: row['member_name'] as String,
+      transactionType: row['transaction_type'] as String,
+      paymentMode: row['payment_mode'] as String,
+      amountPaise: row['amount_paise'] as int,
+      transactionDate: DateTime.parse(row['transaction_date'] as String),
+      receiptNumber: row['receipt_number'] as String,
+      remarks: row['remarks'] as String?,
+      isReversed: (row['is_reversed'] as int) == 1,
+      reversalReason: row['reversal_reason'] as String?,
+    );
+  }
+
   /// Fetches transaction detail along with double-entry journal lines and audit logs
   Future<TransactionDetailInfo?> getTransactionDetails(String transactionId) async {
     final db = await _db.database;

@@ -9,20 +9,75 @@ class AppDatabase {
   static const int _dbVersion = 1;
 
   final DatabaseKeyManager _keyManager;
-  Database? _db;
+  static Database? _sharedDb;
+  static Future<Database>? _dbInitFuture;
 
-  AppDatabase({DatabaseKeyManager? keyManager})
-      : _keyManager = keyManager ?? DatabaseKeyManager();
+  static final AppDatabase _instance = AppDatabase._internal();
 
+  factory AppDatabase({DatabaseKeyManager? keyManager}) {
+    if (keyManager != null) {
+      return AppDatabase._withKeyManager(keyManager);
+    }
+    return _instance;
+  }
+
+  AppDatabase._internal() : _keyManager = DatabaseKeyManager();
+  AppDatabase._withKeyManager(this._keyManager);
+
+  /// Provides singleton access to the active encrypted database instance,
+  /// protected by a memoized initialization future lock to eliminate concurrency races.
   Future<Database> get database async {
-    if (_db != null && _db!.isOpen) return _db!;
-    _db = await _initDatabase();
-    return _db!;
+    if (_sharedDb != null && _sharedDb!.isOpen) return _sharedDb!;
+    _dbInitFuture ??= _initDatabase();
+    try {
+      _sharedDb = await _dbInitFuture!;
+      return _sharedDb!;
+    } catch (e) {
+      _dbInitFuture = null;
+      rethrow;
+    }
   }
 
   Future<String> getDatabasePath() async {
     final docsDir = await getApplicationDocumentsDirectory();
     return p.join(docsDir.path, _dbFileName);
+  }
+
+  Future<bool> doesDatabaseFileExist() async {
+    final path = await getDatabasePath();
+    return await File(path).exists();
+  }
+
+  /// Closes database connection and clears singleton future lock
+  Future<void> close() async {
+    if (_sharedDb != null && _sharedDb!.isOpen) {
+      await _sharedDb!.close();
+      _sharedDb = null;
+    }
+    _dbInitFuture = null;
+  }
+
+  /// Completely resets an orphaned or unrecoverable database file and reinitializes fresh
+  Future<Database> resetOrReinitializeDatabase() async {
+    await close();
+    final path = await getDatabasePath();
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    final journal = File('$path-journal');
+    if (await journal.exists()) await journal.delete();
+    final wal = File('$path-wal');
+    if (await wal.exists()) await wal.delete();
+    final shm = File('$path-shm');
+    if (await shm.exists()) await shm.delete();
+
+    // Reset secure storage key
+    await _keyManager.deleteKey();
+
+    _sharedDb = null;
+    _dbInitFuture = null;
+    return await database;
   }
 
   Future<Database> _initDatabase({String? overridePassword}) async {
@@ -373,12 +428,8 @@ class AppDatabase {
     });
     return defaultOrgId;
   }
-
-  Future<void> close() async {
-    if (_db != null && _db!.isOpen) {
-      await _db!.close();
-      _db = null;
-    }
-  }
 }
+
+/// Alias for AppDatabase conforming to naming conventions
+typedef DatabaseHelper = AppDatabase;
 

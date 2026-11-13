@@ -272,4 +272,34 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get disbursementReversedSuccess =>
       'ವಿತರಣೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಹಿಂಪಡೆಯಲಾಗಿದೆ ಮತ್ತು ಲೆಡ್ಜರ್ ಸಮತೋಲನಗೊಂಡಿದೆ!';
+
+  @override
+  String get sendMessage => 'ಸಂದೇಶ ಕಳುಹಿಸಿ';
+
+  @override
+  String get transactionSuccess => 'ವ್ಯವಹಾರ ಯಶಸ್ವಿಯಾಗಿ ದಾಖಲಾಗಿದೆ';
+
+  @override
+  String get done => 'ಮುಗಿಯಿತು';
+
+  @override
+  String get shareViaWhatsApp => 'ವಾಟ್ಸಾಪ್ ಮೂಲಕ ಕಳುಹಿಸಿ';
+
+  @override
+  String get sendSms => 'ಎಸ್ಸೆಮ್ಮೆಸ್ ಕಳುಹಿಸಿ';
+
+  @override
+  String get sharePdfReceipt => 'ಪಿಡಿಎಫ್ ರಸೀದಿ ಹಂಚಿಕೊಳ್ಳಿ';
+
+  @override
+  String get shareOtherApps => 'ಇತರ ಆ್ಯಪ್‌ಗಳ ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಿ';
+
+  @override
+  String get messagePreview => 'ರಸೀದಿ ಸಂದೇಶ ಮುನ್ನೋಟ';
+
+  @override
+  String get updatedSavingsBalance => 'ನವೀಕೃತ ಉಳಿತಾಯ ಮೊತ್ತ';
+
+  @override
+  String get remainingLoanPrincipal => 'ಬಾಕಿ ಉಳಿದ ಸಾಲದ ಅಸಲು';
 }

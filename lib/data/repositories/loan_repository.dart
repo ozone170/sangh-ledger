@@ -141,7 +141,7 @@ class LoanRepository {
   }
 
   /// Confirms loan disbursement: Draft -> Active, posts accounting journal atomically
-  Future<void> disburseLoan({
+  Future<String> disburseLoan({
     required String loanId,
     required PaymentMode paymentMode,
     DateTime? disbursementDate,
@@ -150,7 +150,7 @@ class LoanRepository {
     final now = DateTime.now();
     final disburseDate = disbursementDate ?? now;
 
-    await db.transaction((txn) async {
+    return await db.transaction<String>((txn) async {
       final loanResults = await txn.query('loans', where: 'id = ?', whereArgs: [loanId], limit: 1);
       if (loanResults.isEmpty) throw StateError('Loan not found');
       final loanData = loanResults.first;
@@ -219,6 +219,8 @@ class LoanRepository {
         'details_json': '{"loanCode": "${loan.loanCode}", "mode": "${paymentMode.name}", "amountPaise": ${loan.principalPaise}}',
         'created_at': now.toIso8601String(),
       });
+
+      return receiptNumber;
     });
   }
 

@@ -7,10 +7,11 @@ import '../../core/ui/buttons.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
-import '../../domain/services/accounting_engine.dart';
-import '../../domain/services/receipt_sharing_service.dart';
+import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../domain/services/accounting_engine.dart';
 import '../../l10n/app_localizations.dart';
+import '../transactions/send_message_bottom_sheet.dart';
 import 'loans_screen.dart';
 
 class LoanDetailScreen extends ConsumerWidget {
@@ -63,12 +64,26 @@ class LoanDetailScreen extends ConsumerWidget {
     if (confirm == true) {
       try {
         final repo = ref.read(loanRepositoryProvider);
-        await repo.disburseLoan(loanId: loanId, paymentMode: mode);
+        final rcp = await repo.disburseLoan(loanId: loanId, paymentMode: mode);
         invalidateFinancialProviders(ref, memberId: memberId, loanId: loanId);
+
+        final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
+        final member = await MemberRepository().getMemberById(memberId);
+
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.loanDisbursedSuccess), backgroundColor: AppColors.successGreen),
-          );
+          if (txItem != null) {
+            PostTransactionSuccessDialog.show(
+              context,
+              transaction: txItem,
+              memberPhone: member?.phone,
+              updatedBalancePaise: principalPaise,
+              balanceLabel: 'Loan Principal / ಸಾಲದ ಮೊತ್ತ:',
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.loanDisbursedSuccess), backgroundColor: AppColors.successGreen),
+            );
+          }
         }
       } catch (e) {
         if (context.mounted) {
@@ -402,9 +417,10 @@ class LoanDetailScreen extends ConsumerWidget {
                             ),
                             const SizedBox(width: 4),
                             IconButton(
-                              icon: const Icon(Icons.share, size: 20, color: Color(0xFF25D366)),
-                              tooltip: 'Share Receipt (WhatsApp/SMS)',
-                              onPressed: () {
+                              icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF25D366)),
+                              tooltip: 'Send Message (WhatsApp/SMS/PDF)',
+                              onPressed: () async {
+                                final member = await MemberRepository().getMemberById(loan.memberId);
                                 final tx = TransactionItem(
                                   id: rep.transactionId,
                                   organizationId: loan.organizationId,
@@ -419,10 +435,13 @@ class LoanDetailScreen extends ConsumerWidget {
                                   remarks: 'Interest: ${CurrencyFormatter.formatPaise(rep.interestPortionPaise)}, Principal: ${CurrencyFormatter.formatPaise(rep.principalPortionPaise)}',
                                   isReversed: false,
                                 );
-                                ReceiptSharingService.showShareOptionsModal(
-                                  context,
-                                  transaction: tx,
-                                );
+                                if (context.mounted) {
+                                  SendMessageBottomSheet.show(
+                                    context,
+                                    transaction: tx,
+                                    memberPhone: member?.phone,
+                                  );
+                                }
                               },
                             ),
                           ],

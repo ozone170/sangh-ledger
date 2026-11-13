@@ -6,10 +6,13 @@ import '../../core/ui/amount_input.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/inputs.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/repayment_repository.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/accounting_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../loans/loans_screen.dart';
+import '../transactions/send_message_bottom_sheet.dart';
 
 final repaymentRepositoryProvider = Provider<RepaymentRepository>((ref) {
   return RepaymentRepository();
@@ -82,11 +85,26 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
 
       invalidateFinancialProviders(ref, loanId: _selectedLoanId);
 
+      final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
+      final member = txItem != null ? await MemberRepository().getMemberById(txItem.memberId) : null;
+      final remainingPrincipal = _preview?.remainingPrincipalPaise;
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Repayment confirmed! Receipt: $rcp'), backgroundColor: AppColors.successGreen),
-      );
       Navigator.of(context).pop();
+
+      if (txItem != null) {
+        PostTransactionSuccessDialog.show(
+          context,
+          transaction: txItem,
+          memberPhone: member?.phone,
+          updatedBalancePaise: remainingPrincipal,
+          balanceLabel: 'Remaining Principal / ಬಾಕಿ ಅಸಲು:',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Repayment confirmed! Receipt: $rcp'), backgroundColor: AppColors.successGreen),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

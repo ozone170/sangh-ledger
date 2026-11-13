@@ -139,6 +139,19 @@ ${transaction.remarks?.isNotEmpty == true ? '📝 *ವಿವರ / Remarks:* ${tr
     );
   }
 
+  /// Shares custom receipt text through Android system share sheet
+  static Future<void> shareViaOtherApps({
+    required String text,
+    String? subject,
+  }) async {
+    await SharePlus.instance.share(
+      ShareParams(
+        text: text,
+        subject: subject,
+      ),
+    );
+  }
+
   /// Shows unified Share Bottom Sheet supporting WhatsApp, SMS, Share PDF & Print
   static void showShareOptionsModal(
     BuildContext context, {

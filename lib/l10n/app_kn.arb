@@ -86,6 +86,16 @@
   "repaymentHistory": "ಮರುಪಾವತಿ ಇತಿಹಾಸ",
   "noRepaymentsYet": "ಇನ್ನೂ ಯಾವುದೇ ಮರುಪಾವತಿಗಳು ದಾಖಲಾಗಿಲ್ಲ",
   "loanDisbursedSuccess": "ಸಾಲವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ವಿತರಿಸಲಾಗಿದೆ!",
-  "disbursementReversedSuccess": "ವಿತರಣೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಹಿಂಪಡೆಯಲಾಗಿದೆ ಮತ್ತು ಲೆಡ್ಜರ್ ಸಮತೋಲನಗೊಂಡಿದೆ!"
+  "disbursementReversedSuccess": "ವಿತರಣೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಹಿಂಪಡೆಯಲಾಗಿದೆ ಮತ್ತು ಲೆಡ್ಜರ್ ಸಮತೋಲನಗೊಂಡಿದೆ!",
+  "sendMessage": "ಸಂದೇಶ ಕಳುಹಿಸಿ",
+  "transactionSuccess": "ವ್ಯವಹಾರ ಯಶಸ್ವಿಯಾಗಿ ದಾಖಲಾಗಿದೆ",
+  "done": "ಮುಗಿಯಿತು",
+  "shareViaWhatsApp": "ವಾಟ್ಸಾಪ್ ಮೂಲಕ ಕಳುಹಿಸಿ",
+  "sendSms": "ಎಸ್ಸೆಮ್ಮೆಸ್ ಕಳುಹಿಸಿ",
+  "sharePdfReceipt": "ಪಿಡಿಎಫ್ ರಸೀದಿ ಹಂಚಿಕೊಳ್ಳಿ",
+  "shareOtherApps": "ಇತರ ಆ್ಯಪ್‌ಗಳ ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಿ",
+  "messagePreview": "ರಸೀದಿ ಸಂದೇಶ ಮುನ್ನೋಟ",
+  "updatedSavingsBalance": "ನವೀಕೃತ ಉಳಿತಾಯ ಮೊತ್ತ",
+  "remainingLoanPrincipal": "ಬಾಕಿ ಉಳಿದ ಸಾಲದ ಅಸಲು"
 }
 

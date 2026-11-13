@@ -5,6 +5,14 @@
 -keep class net.sqlcipher.database.** { *; }
 -dontwarn net.sqlcipher.**
 
+# Preserve Sqflite SQLCipher plugin
+-keep class com.davidmartos96.sqflite_sqlcipher.** { *; }
+-dontwarn com.davidmartos96.sqflite_sqlcipher.**
+
+# Preserve Flutter Secure Storage (Android Keystore / EncryptedSharedPreferences)
+-keep class com.it_nomads.fluttersecurestorage.** { *; }
+-dontwarn com.it_nomads.fluttersecurestorage.**
+
 # Preserve Flutter engine & plugin bindings
 -keep class io.flutter.app.** { *; }
 -keep class io.flutter.plugin.** { *; }

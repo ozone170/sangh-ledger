@@ -619,6 +619,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Disbursement successfully reversed and ledger balanced!'**
   String get disbursementReversedSuccess;
+
+  /// No description provided for @sendMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Message'**
+  String get sendMessage;
+
+  /// No description provided for @transactionSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction Recorded Successfully'**
+  String get transactionSuccess;
+
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @shareViaWhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Share via WhatsApp'**
+  String get shareViaWhatsApp;
+
+  /// No description provided for @sendSms.
+  ///
+  /// In en, this message translates to:
+  /// **'Send SMS'**
+  String get sendSms;
+
+  /// No description provided for @sharePdfReceipt.
+  ///
+  /// In en, this message translates to:
+  /// **'Share PDF Receipt'**
+  String get sharePdfReceipt;
+
+  /// No description provided for @shareOtherApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Share via Other Apps'**
+  String get shareOtherApps;
+
+  /// No description provided for @messagePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Receipt Message Preview'**
+  String get messagePreview;
+
+  /// No description provided for @updatedSavingsBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated Savings Balance'**
+  String get updatedSavingsBalance;
+
+  /// No description provided for @remainingLoanPrincipal.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining Loan Principal'**
+  String get remainingLoanPrincipal;
 }
 
 class _AppLocalizationsDelegate

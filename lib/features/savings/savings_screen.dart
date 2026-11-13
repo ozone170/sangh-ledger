@@ -7,10 +7,13 @@ import '../../core/ui/buttons.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/savings_repository.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/accounting_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../members/members_controller.dart';
+import '../transactions/send_message_bottom_sheet.dart';
 
 final savingsRepositoryProvider = Provider<SavingsRepository>((ref) {
   return SavingsRepository();
@@ -114,13 +117,163 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     invalidateFinancialProviders(ref, memberId: selectedMemberId);
                     ref.invalidate(recentSavingsActivitiesProvider);
 
+                    final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
+                    final member = await MemberRepository().getMemberById(selectedMemberId!);
+                    final memberBalances = await MemberRepository().getMembersWithBalances();
+                    final updatedBal = memberBalances
+                        .where((m) => m.member.id == selectedMemberId)
+                        .map((m) => m.savingsBalancePaise)
+                        .firstOrNull;
+
                     if (ctx.mounted) {
                       Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Deposit posted! Receipt: $rcp'),
-                          backgroundColor: AppColors.successGreen,
-                        ),
+                    }
+                    if (context.mounted && txItem != null) {
+                      PostTransactionSuccessDialog.show(
+                        context,
+                        transaction: txItem,
+                        memberPhone: member?.phone,
+                        updatedBalancePaise: updatedBal,
+                        balanceLabel: 'Savings Balance / ಉಳಿತಾಯ:',
+                      );
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.errorCrimson),
+                      );
+                    }
+                  }
+                },
+                child: Text(l10n.confirm),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showWithdrawDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    String? selectedMemberId;
+    int? withdrawPaise;
+    PaymentMode mode = PaymentMode.cash;
+    final remarksController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final membersWithBalAsync = ref.watch(membersWithBalancesProvider);
+
+          return AlertDialog(
+            title: Text('${l10n.withdraw} ${l10n.savings}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  membersWithBalAsync.when(
+                    data: (members) {
+                      final eligible = members.where((m) => m.member.isActive && m.savingsBalancePaise > 0).toList();
+                      if (eligible.isEmpty) {
+                        return const Text('No active members with savings balance available.');
+                      }
+                      final currentMember = eligible.where((m) => m.member.id == selectedMemberId).firstOrNull;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedMemberId,
+                            decoration: InputDecoration(labelText: '${l10n.members} *'),
+                            items: eligible
+                                .map((m) => DropdownMenuItem(
+                                      value: m.member.id,
+                                      child: Text('${m.member.fullName} (${m.member.memberCode})'),
+                                    ))
+                                .toList(),
+                            onChanged: (val) => setDialogState(() => selectedMemberId = val),
+                          ),
+                          if (currentMember != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Available Balance: ${CurrencyFormatter.formatPaise(currentMember.savingsBalancePaise)}',
+                              style: const TextStyle(fontSize: 12, color: AppColors.financialTeal, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                    loading: () => const CircularProgressIndicator(),
+                    error: (_, _) => const Text('Failed to load members'),
+                  ),
+                  const SizedBox(height: 16),
+                  AmountInput(
+                    label: '${l10n.amount} *',
+                    onChanged: (val) => withdrawPaise = val,
+                  ),
+                  const SizedBox(height: 16),
+                  SegmentedButton<PaymentMode>(
+                    segments: [
+                      ButtonSegment(value: PaymentMode.cash, label: Text(l10n.cash)),
+                      ButtonSegment(value: PaymentMode.bank, label: Text(l10n.bank)),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (set) => setDialogState(() => mode = set.first),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: remarksController,
+                    decoration: InputDecoration(labelText: l10n.remarks),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.cancel),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedMemberId == null || withdrawPaise == null || withdrawPaise! <= 0) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Please select member and valid amount')),
+                    );
+                    return;
+                  }
+                  try {
+                    final repo = ref.read(savingsRepositoryProvider);
+                    final rcp = await repo.recordWithdrawal(
+                      memberId: selectedMemberId!,
+                      amountPaise: withdrawPaise!,
+                      paymentMode: mode,
+                      reason: remarksController.text.trim().isNotEmpty
+                          ? remarksController.text.trim()
+                          : 'Member Savings Withdrawal',
+                    );
+
+                    invalidateFinancialProviders(ref, memberId: selectedMemberId);
+                    ref.invalidate(recentSavingsActivitiesProvider);
+
+                    final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
+                    final member = await MemberRepository().getMemberById(selectedMemberId!);
+                    final memberBalances = await MemberRepository().getMembersWithBalances();
+                    final updatedBal = memberBalances
+                        .where((m) => m.member.id == selectedMemberId)
+                        .map((m) => m.savingsBalancePaise)
+                        .firstOrNull;
+
+                    if (ctx.mounted) {
+                      Navigator.of(ctx).pop();
+                    }
+                    if (context.mounted && txItem != null) {
+                      PostTransactionSuccessDialog.show(
+                        context,
+                        transaction: txItem,
+                        memberPhone: member?.phone,
+                        updatedBalancePaise: updatedBal,
+                        balanceLabel: 'Remaining Savings / ಉಳಿತಾಯ:',
                       );
                     }
                   } catch (e) {
@@ -196,11 +349,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                   child: SecondaryButton(
                     text: l10n.withdraw,
                     icon: Icons.arrow_upward,
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Select member from Members tab to record withdrawal')),
-                      );
-                    },
+                    onPressed: () => _showWithdrawDialog(context),
                   ),
                 ),
               ],
