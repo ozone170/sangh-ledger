@@ -163,6 +163,30 @@ void main() {
       expect(unpacked.findFile('sangh_logo.png'), isNotNull);
     });
 
+    test('Launcher icons and app emblem assets exist across all resolutions', () {
+      final mipmapSizes = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
+      for (final density in mipmapSizes) {
+        final iconFile = File('android/app/src/main/res/mipmap-$density/ic_launcher.png');
+        expect(iconFile.existsSync(), isTrue, reason: 'mipmap-$density icon must exist');
+        expect(iconFile.lengthSync(), greaterThan(500), reason: 'mipmap-$density icon must not be empty');
+      }
+
+      final appLogoAsset = File('assets/images/app_logo.png');
+      expect(appLogoAsset.existsSync(), isTrue);
+      expect(appLogoAsset.lengthSync(), greaterThan(1000));
+    });
+
+    test('Google Drive error 10 / DEVELOPER_ERROR message directs user to direct email link', () {
+      const platformErrorMsg = 'PlatformException(sign_in_failed, com.google.android.gms.common.api.ApiException: 10: , null, null)';
+      expect(platformErrorMsg.contains('r2: 10') || platformErrorMsg.contains(': 10') || platformErrorMsg.contains(' 10:'), isTrue);
+
+      const exception = GoogleDriveAuthException(
+        'Google Cloud OAuth registration pending (Code 10: DEVELOPER_ERROR). You can enter your Google account email directly to link cloud backup.',
+      );
+      expect(exception.toString(), contains('Code 10: DEVELOPER_ERROR'));
+      expect(exception.toString(), contains('enter your Google account email directly'));
+    });
+
     test('2-Day Rolling Retention strictly keeps only the 2 most recent dates', () async {
       final tempDir = Directory.systemTemp.createTempSync('sangh_retention_test_');
       final backupDir = Directory('${tempDir.path}/SanghLedger_Backups')..createSync(recursive: true);

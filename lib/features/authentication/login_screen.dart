@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
@@ -6,6 +7,7 @@ import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../l10n/app_localizations.dart';
 
 final isAppInitializedProvider = FutureProvider<bool>((ref) async {
@@ -30,10 +32,18 @@ class LoginScreen extends ConsumerWidget {
     final currentLocale = ref.watch(localeProvider);
     final isInitAsync = ref.watch(isAppInitializedProvider);
     final isInitialized = isInitAsync.valueOrNull ?? false;
+    final orgAsync = ref.watch(organizationProvider);
+    final org = orgAsync.valueOrNull;
+
+    final logoPath = org?.logoPath;
+    final hasCustomLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
+    final displayName = org?.name != null && org!.name.isNotEmpty
+        ? (org.name.endsWith('Ledger') || org.name.contains('ಸಂಘ') ? org.name : '${org.name} Ledger')
+        : l10n.appTitle;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        title: Text(displayName),
         actions: [
           TextButton.icon(
             onPressed: () => ref.read(localeProvider.notifier).toggleLocale(),
@@ -51,12 +61,57 @@ class LoginScreen extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.account_balance, size: 64, color: AppColors.primaryNavy),
-              const SizedBox(height: 16),
-              Text(
-                l10n.appTitle,
-                style: Theme.of(context).textTheme.headlineMedium,
+              // Dynamic Sangh Logo (custom uploaded logo or branded app emblem)
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.primaryNavy, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: hasCustomLogo
+                    ? ClipOval(
+                        child: Image.file(
+                          File(logoPath),
+                          width: 90,
+                          height: 90,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : ClipOval(
+                        child: Image.asset(
+                          'assets/images/app_logo.png',
+                          width: 90,
+                          height: 90,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_balance, size: 54, color: AppColors.primaryNavy),
+                        ),
+                      ),
               ),
+              const SizedBox(height: 20),
+              Text(
+                displayName,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryNavy,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              if (org?.registrationNumber != null && org!.registrationNumber!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Reg: ${org.registrationNumber}',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 'Offline-first Community Financial Ledger',

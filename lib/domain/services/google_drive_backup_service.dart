@@ -156,10 +156,22 @@ class GoogleDriveBackupService {
       final msg = e.message ?? '';
       if (e.code == 'network_error' ||
           msg.contains('r2: 7') ||
-          msg.contains('7') ||
+          msg.contains(' 7:') ||
+          msg.contains(': 7') ||
           e.code == '7') {
         throw GoogleDriveAuthException(
           'Google Drive sign-in requires an active internet connection and valid Google Cloud OAuth SHA-1 registration for in.sanghledger.app. Please check internet connection and retry.',
+          originalError: e,
+        );
+      }
+      if (e.code == 'sign_in_failed' ||
+          msg.contains('r2: 10') ||
+          msg.contains(' 10:') ||
+          msg.contains(': 10') ||
+          msg.contains('10') ||
+          e.code == '10') {
+        throw GoogleDriveAuthException(
+          'Google Cloud OAuth registration pending (Code 10: DEVELOPER_ERROR). You can enter your Google account email directly to link cloud backup.',
           originalError: e,
         );
       }

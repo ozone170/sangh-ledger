@@ -213,6 +213,111 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     await RestoreBackupDialog.show(context);
   }
 
+  Future<void> _enterGoogleDriveEmailDialog([String? message]) async {
+    final emailController = TextEditingController(text: _gDriveEmail ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_upload_outlined, color: AppColors.primaryNavy),
+            SizedBox(width: 8),
+            Text('Google Account Setup'),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (message != null && message.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningAmber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.warningAmber),
+                  ),
+                  child: Text(
+                    message,
+                    style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+              const Text(
+                'Enter your Google account email address. Encrypted AES-256-GCM backups will be bound to this account.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: emailController,
+                autofocus: true,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Google Account Email',
+                  hintText: 'e.g. admin@gmail.com',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) {
+                    return 'Please enter your Google account email';
+                  }
+                  final trimmed = val.trim();
+                  if (!trimmed.contains('@') || !trimmed.contains('.')) {
+                    return 'Please enter a valid email address';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('Link Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && emailController.text.trim().isNotEmpty) {
+      final email = emailController.text.trim();
+      try {
+        final gDrive = ref.read(googleDriveBackupServiceProvider);
+        await gDrive.connectAccount(email);
+        if (mounted) {
+          setState(() => _gDriveEmail = email);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Google Drive account linked: $email'),
+              backgroundColor: AppColors.successGreen,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to link account: $e'), backgroundColor: AppColors.errorCrimson),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _connectGoogleDrive() async {
     setState(() => _isConnectingDrive = true);
     try {
@@ -230,9 +335,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           SnackBar(
             content: Text(e.message),
             backgroundColor: AppColors.errorCrimson,
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 4),
           ),
         );
+        // Seamlessly prompt direct email input dialog so setup is not blocked
+        await _enterGoogleDriveEmailDialog(e.message);
       }
     } catch (e) {
       if (mounted) {
@@ -240,12 +347,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           SnackBar(
             content: Text('Google Sign-In failed: $e'),
             backgroundColor: AppColors.errorCrimson,
-            duration: const Duration(seconds: 5),
+            duration: const Duration(seconds: 4),
           ),
         );
+        await _enterGoogleDriveEmailDialog('Google Sign-In error: $e');
       }
     } finally {
       if (mounted) setState(() => _isConnectingDrive = false);
+    }
+  }
+
+  Future<void> _useDefaultLocalFolder() async {
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final backupDir = Directory(p.join(appDocDir.path, 'SanghLedger_Backups'));
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+      final backupService = ref.read(backupServiceProvider);
+      await backupService.setCustomBackupFolderPath(backupDir.path);
+      if (mounted) {
+        setState(() => _selectedLocalFolder = backupDir.path);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Using default backup folder: ${backupDir.path}'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not set default folder: $e'), backgroundColor: AppColors.errorCrimson),
+        );
+      }
     }
   }
 
@@ -292,7 +427,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.account_balance, size: 64, color: AppColors.primaryNavy),
+                ClipOval(
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_balance, size: 64, color: AppColors.primaryNavy),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Welcome to Sangh Ledger',
@@ -744,9 +887,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                   const SizedBox(height: 8),
                   if (_gDriveEmail != null) ...[
-                    Text('Connected: $_gDriveEmail', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.successGreen, fontSize: 13)),
-                    const SizedBox(height: 4),
-                    const Text('Dedicated folder: Google Drive / SanghLedger_Backups', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Connected: $_gDriveEmail', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.successGreen, fontSize: 13)),
+                              const SizedBox(height: 4),
+                              const Text('Dedicated folder: Google Drive / SanghLedger_Backups', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _enterGoogleDriveEmailDialog(),
+                          child: const Text('Change'),
+                        ),
+                      ],
+                    ),
                   ] else ...[
                     const Text(
                       'Bind your Google account to auto-sync encrypted AES-256-GCM backups so your data can be restored on any device.',
@@ -758,6 +916,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       icon: Icons.add_to_drive,
                       isLoading: _isConnectingDrive,
                       onPressed: _connectGoogleDrive,
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.edit_note, size: 18),
+                        label: const Text('Or Enter Google Account Email Directly'),
+                        onPressed: () => _enterGoogleDriveEmailDialog(),
+                      ),
                     ),
                   ],
                 ],
@@ -795,10 +961,26 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 12),
-                  SecondaryButton(
-                    text: _selectedLocalFolder != null ? 'Change Device Folder' : 'Select Device Backup Folder',
-                    icon: Icons.create_new_folder_outlined,
-                    onPressed: _selectLocalFolder,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SecondaryButton(
+                          text: _selectedLocalFolder != null ? 'Change Folder' : 'Select Device Folder',
+                          icon: Icons.create_new_folder_outlined,
+                          onPressed: _selectLocalFolder,
+                        ),
+                      ),
+                      if (_selectedLocalFolder == null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.folder_special, size: 18),
+                            label: const Text('Use Default', style: TextStyle(fontSize: 12)),
+                            onPressed: _useDefaultLocalFolder,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

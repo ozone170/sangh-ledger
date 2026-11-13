@@ -17,51 +17,53 @@ class DashboardScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final summaryAsync = ref.watch(dashboardSummaryProvider);
     final orgAsync = ref.watch(organizationProvider);
+    final org = orgAsync.valueOrNull;
+    final sanghName = org?.name.isNotEmpty == true ? org!.name : 'Sangh';
+    final titleText = '$sanghName Ledger';
+    final logoPath = org?.logoPath;
+    final hasLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: orgAsync.when(
-          data: (org) {
-            final sanghName = org?.name.isNotEmpty == true ? org!.name : 'Sangh';
-            final titleText = '$sanghName Ledger';
-            final logoPath = org?.logoPath;
-            final hasLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
-
-            return Row(
-              children: [
-                const SizedBox(width: 8),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white24,
-                  ),
-                  child: hasLogo
-                      ? ClipOval(
-                          child: Image.file(
-                            File(logoPath),
-                            width: 34,
-                            height: 34,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : const Icon(Icons.account_balance, size: 20, color: Colors.white),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    titleText,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ),
-              ],
-            );
-          },
-          loading: () => Text(l10n.dashboard),
-          error: (e, s) => Text(l10n.dashboard),
+        title: Row(
+          children: [
+            const SizedBox(width: 8),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white24,
+              ),
+              child: hasLogo
+                  ? ClipOval(
+                      child: Image.file(
+                        File(logoPath),
+                        width: 34,
+                        height: 34,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : ClipOval(
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 34,
+                        height: 34,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_balance, size: 20, color: Colors.white),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                titleText,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -97,11 +99,28 @@ class DashboardScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 24,
                         backgroundColor: AppColors.financialTeal,
                         foregroundColor: Colors.white,
-                        child: Icon(Icons.account_balance, size: 28),
+                        child: hasLogo
+                            ? ClipOval(
+                                child: Image.file(
+                                  File(logoPath),
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : ClipOval(
+                                child: Image.asset(
+                                  'assets/images/app_logo.png',
+                                  width: 40,
+                                  height: 40,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_balance, size: 28),
+                                ),
+                              ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -109,7 +128,7 @@ class DashboardScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              l10n.appTitle,
+                              titleText,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
