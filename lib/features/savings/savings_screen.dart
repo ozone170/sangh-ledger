@@ -8,6 +8,7 @@ import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/member_repository.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../data/repositories/savings_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/accounting_engine.dart';
@@ -44,7 +45,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final membersAsync = ref.watch(membersListProvider);
+          final membersAsync = ref.watch(activeMembersProvider);
 
           return AlertDialog(
             title: Text('${l10n.deposit} ${l10n.savings}'),
@@ -55,6 +56,15 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                   membersAsync.when(
                     data: (members) {
                       final activeMembers = members.where((m) => m.isActive).toList();
+                      if (activeMembers.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No active members found. Please register members first.',
+                            style: TextStyle(color: AppColors.errorCrimson),
+                          ),
+                        );
+                      }
                       return DropdownButtonFormField<String>(
                         initialValue: selectedMemberId,
                         decoration: InputDecoration(labelText: '${l10n.members} *'),
@@ -67,8 +77,16 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                         onChanged: (val) => setDialogState(() => selectedMemberId = val),
                       );
                     },
-                    loading: () => const CircularProgressIndicator(),
-                    error: (_, _) => const Text('Failed to load members'),
+                    loading: () => const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                    error: (err, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Failed to load members: $err', style: const TextStyle(color: AppColors.errorCrimson)),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   AmountInput(
@@ -438,7 +456,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                                 final tx = await TransactionRepository().getTransactionByReceiptNumber(act['receipt_number'] as String);
                                 if (context.mounted && tx != null) {
                                   final msg = ReceiptSharingService.formatSavingsSummaryMessage(
-                                    sanghName: 'Sangh Ledger',
+                                    sanghName: (ref.read(organizationProvider).value?.name.trim().isNotEmpty == true) ? ref.read(organizationProvider).value!.name : 'Sangh Ledger',
                                     memberName: act['member_name'] as String,
                                     memberCode: act['member_code'] as String,
                                     receiptNumber: act['receipt_number'] as String,

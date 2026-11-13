@@ -8,6 +8,7 @@ import '../../core/ui/list_items.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/member_repository.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/pdf_receipt_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -169,9 +170,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     icon: const Icon(Icons.print),
                     label: const Text('Print (PDF)'),
                     onPressed: () async {
+                      final org = ref.read(organizationProvider).value;
                       await PdfReceiptService.printReceipt(
-                        sanghName: 'Sangh Ledger',
-                        sanghAddress: 'Main Branch',
+                        sanghName: (org?.name != null && org!.name.isNotEmpty) ? org.name : 'Sangh Ledger',
+                        sanghAddress: (org?.address != null && org!.address.isNotEmpty) ? org.address : 'Karnataka, India',
                         transaction: tx,
                       );
                     },

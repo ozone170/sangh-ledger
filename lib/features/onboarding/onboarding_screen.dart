@@ -9,6 +9,7 @@ import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../domain/services/google_drive_backup_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../backup/restore_backup_dialog.dart';
@@ -194,6 +195,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     try {
       _syncDraft();
       await ref.read(onboardingProvider.notifier).commitOrganizationSetup();
+      ref.invalidate(organizationProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sangh organization & admin setup completed!')),

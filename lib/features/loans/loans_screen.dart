@@ -8,6 +8,7 @@ import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/loan_repository.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../domain/entities/loan.dart';
 import '../../domain/services/accounting_engine.dart';
 import '../../data/repositories/member_repository.dart';
@@ -64,7 +65,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final membersAsync = ref.watch(membersListProvider);
+          final membersAsync = ref.watch(activeMembersProvider);
 
           return AlertDialog(
             title: Text(l10n.issueLoan),
@@ -76,6 +77,15 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                   membersAsync.when(
                     data: (members) {
                       final activeMembers = members.where((m) => m.isActive).toList();
+                      if (activeMembers.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No active members found. Please register members first.',
+                            style: TextStyle(color: AppColors.errorCrimson),
+                          ),
+                        );
+                      }
                       return DropdownButtonFormField<String>(
                         initialValue: selectedMemberId,
                         decoration: InputDecoration(labelText: '${l10n.members} *'),
@@ -88,8 +98,16 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                         onChanged: (val) => setDialogState(() => selectedMemberId = val),
                       );
                     },
-                    loading: () => const CircularProgressIndicator(),
-                    error: (_, _) => const Text('Failed to load members'),
+                    loading: () => const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                    error: (err, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Failed to load members: $err', style: const TextStyle(color: AppColors.errorCrimson)),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   AmountInput(
@@ -430,7 +448,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                                       );
 
                                       final msg = ReceiptSharingService.formatLoanSummaryMessage(
-                                        sanghName: 'Sangh Ledger',
+                                        sanghName: (ref.read(organizationProvider).value?.name.trim().isNotEmpty == true) ? ref.read(organizationProvider).value!.name : 'Sangh Ledger',
                                         memberName: member?.fullName ?? 'Member',
                                         memberCode: member?.memberCode ?? '',
                                         loanCode: loan.loanCode,

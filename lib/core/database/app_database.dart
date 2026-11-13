@@ -91,6 +91,10 @@ class AppDatabase {
         version: _dbVersion,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON;');
+          await db.execute('PRAGMA busy_timeout = 5000;');
+        },
+        onOpen: (db) async {
+          await db.execute('PRAGMA busy_timeout = 5000;');
         },
         onCreate: (db, version) async {
           await _createTables(db);
@@ -396,17 +400,21 @@ class AppDatabase {
         'currency': 'INR',
         'monthly_interest_bps': 100,
         'max_members': 100,
-        'is_initialized': 1,
+        'is_initialized': 0,
         'created_at': now,
         'updated_at': now,
       });
     }
   }
 
-  /// Retrieves active organization ID, seeding a default organization record if empty
+  /// Retrieves active organization ID, prioritizing initialized user organizations
   Future<String> getActiveOrganizationId([DatabaseExecutor? executor]) async {
     final db = executor ?? await database;
-    final orgResults = await db.query('organizations', limit: 1);
+    final orgResults = await db.query(
+      'organizations',
+      orderBy: 'is_initialized DESC, updated_at DESC, created_at DESC',
+      limit: 1,
+    );
     if (orgResults.isNotEmpty) {
       return orgResults.first['id'] as String;
     }
@@ -422,7 +430,7 @@ class AppDatabase {
       'currency': 'INR',
       'monthly_interest_bps': 100,
       'max_members': 100,
-      'is_initialized': 1,
+      'is_initialized': 0,
       'created_at': now,
       'updated_at': now,
     });

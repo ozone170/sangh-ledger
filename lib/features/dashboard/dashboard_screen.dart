@@ -18,8 +18,12 @@ class DashboardScreen extends ConsumerWidget {
     final summaryAsync = ref.watch(dashboardSummaryProvider);
     final orgAsync = ref.watch(organizationProvider);
     final org = orgAsync.valueOrNull;
-    final sanghName = org?.name.isNotEmpty == true ? org!.name : 'Sangh';
-    final titleText = '$sanghName Ledger';
+    final rawName = (org?.name ?? '').trim();
+    final titleText = rawName.isEmpty
+        ? 'Sangh Ledger'
+        : (rawName.toLowerCase().endsWith('ledger') || rawName.contains('ಲೆಡ್ಜರ್')
+            ? rawName
+            : '$rawName Ledger');
     final logoPath = org?.logoPath;
     final hasLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
 

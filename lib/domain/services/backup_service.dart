@@ -204,11 +204,14 @@ class BackupService {
   /// with WAL checkpointing, VACUUM compaction, sangh_logo.png inclusion,
   /// and 2-day rolling retention.
   Future<File> createBackup({String? adminPassword, bool isAuto = false}) async {
-    // 0. Checkpoint WAL and VACUUM SQLite database before archiving for space efficiency
+    // 0. Perform a non-blocking passive WAL checkpoint to flush committed frames without locking the database
     try {
       final db = await _db.database;
-      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE);');
-      await db.execute('VACUUM;');
+      await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE);');
+      if (!isAuto) {
+        // Only run VACUUM during manual explicit maintenance
+        await db.execute('VACUUM;');
+      }
     } catch (_) {}
 
     final dbPath = await _db.getDatabasePath();

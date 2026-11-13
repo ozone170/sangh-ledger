@@ -8,6 +8,7 @@ import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/repayment_repository.dart';
+import '../../data/repositories/organization_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/entities/member.dart';
 import '../../domain/services/receipt_sharing_service.dart';
@@ -295,7 +296,7 @@ class MemberDetailScreen extends ConsumerWidget {
                             final currentBal = savingsBalanceAsync.valueOrNull ?? 0;
                             if (context.mounted && tx != null) {
                               final msg = ReceiptSharingService.formatSavingsSummaryMessage(
-                                sanghName: 'Sangh Ledger',
+                                sanghName: (ref.read(organizationProvider).value?.name.trim().isNotEmpty == true) ? ref.read(organizationProvider).value!.name : 'Sangh Ledger',
                                 memberName: member.fullName,
                                 memberCode: member.memberCode,
                                 receiptNumber: t['receipt_number'] as String,
@@ -401,7 +402,7 @@ class MemberDetailScreen extends ConsumerWidget {
                               );
 
                               final msg = ReceiptSharingService.formatLoanSummaryMessage(
-                                sanghName: 'Sangh Ledger',
+                                sanghName: (ref.read(organizationProvider).value?.name.trim().isNotEmpty == true) ? ref.read(organizationProvider).value!.name : 'Sangh Ledger',
                                 memberName: member.fullName,
                                 memberCode: member.memberCode,
                                 loanCode: loan.loanCode,

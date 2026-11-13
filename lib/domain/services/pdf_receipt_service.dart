@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../../core/database/app_database.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
+import 'pdf_branding_header.dart';
 import 'pdf_font_loader.dart';
 
 class PdfReceiptService {
@@ -21,43 +20,16 @@ class PdfReceiptService {
   }) async {
     final pdf = pw.Document();
 
-    String resolvedName = sanghName;
-    String resolvedAddress = sanghAddress;
-    String contactPhone = '';
-    String? registrationNumber;
-    Uint8List? logoBytes;
+    final org = await PdfBrandingHeader.loadOrgHeader(
+      fallbackName: sanghName.isNotEmpty && sanghName != 'Sangh Ledger' ? sanghName : null,
+      fallbackAddress: sanghAddress.isNotEmpty && sanghAddress != 'Karnataka, India' ? sanghAddress : null,
+    );
 
-    try {
-      final db = await AppDatabase().database;
-      final orgResults = await db.query('organizations', limit: 1);
-      if (orgResults.isNotEmpty) {
-        final org = orgResults.first;
-        final name = org['name'] as String?;
-        final addr = org['address'] as String?;
-        final cp = org['contact_phone'] as String?;
-        final rn = org['registration_number'] as String?;
-        final logoPath = org['logo_path'] as String?;
-
-        if (resolvedName.isEmpty || resolvedName == 'Sangh Ledger') {
-          if (name != null && name.isNotEmpty) resolvedName = name;
-        }
-        if (resolvedAddress.isEmpty || resolvedAddress == 'Karnataka, India') {
-          if (addr != null && addr.isNotEmpty) resolvedAddress = addr;
-        }
-        if (cp != null && cp.isNotEmpty) contactPhone = cp;
-        if (rn != null && rn.isNotEmpty) registrationNumber = rn;
-
-        if (logoPath != null && logoPath.isNotEmpty) {
-          final logoFile = File(logoPath);
-          if (await logoFile.exists()) {
-            logoBytes = await logoFile.readAsBytes();
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (resolvedName.isEmpty) resolvedName = isKannada ? 'ಸಂಘ ಲೆಡ್ಜರ್' : 'Sangh Ledger';
-    if (resolvedAddress.isEmpty) resolvedAddress = 'Karnataka, India';
+    final resolvedName = org.name;
+    final resolvedAddress = org.address;
+    final contactPhone = org.contactPhone;
+    final registrationNumber = org.registrationNumber;
+    final logoBytes = org.logoBytes;
 
     final themeData = await PdfFontLoader.getThemeData();
     final title = isKannada ? 'ರಸೀದಿ' : 'PAYMENT RECEIPT';

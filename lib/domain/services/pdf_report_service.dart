@@ -1,53 +1,17 @@
-import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../../core/database/app_database.dart';
 import '../../core/utils/currency_formatter.dart';
+import 'pdf_branding_header.dart';
 import 'pdf_font_loader.dart';
 import 'reports_service.dart';
 
 class PdfReportService {
   PdfReportService._();
 
-  static Future<Map<String, dynamic>> _getOrgHeader() async {
-    String name = 'Sangh Ledger';
-    String address = 'Karnataka, India';
-    String contactPhone = '';
-    String? registrationNumber;
-    Uint8List? logoBytes;
-
-    try {
-      final db = await AppDatabase().database;
-      final orgResults = await db.query('organizations', limit: 1);
-      if (orgResults.isNotEmpty) {
-        final org = orgResults.first;
-        final n = org['name'] as String?;
-        final a = org['address'] as String?;
-        final cp = org['contact_phone'] as String?;
-        final rn = org['registration_number'] as String?;
-        final lp = org['logo_path'] as String?;
-        if (n != null && n.isNotEmpty) name = n;
-        if (a != null && a.isNotEmpty) address = a;
-        if (cp != null && cp.isNotEmpty) contactPhone = cp;
-        if (rn != null && rn.isNotEmpty) registrationNumber = rn;
-        if (lp != null && lp.isNotEmpty) {
-          final file = File(lp);
-          if (await file.exists()) {
-            logoBytes = await file.readAsBytes();
-          }
-        }
-      }
-    } catch (_) {}
-
-    return {
-      'name': name,
-      'address': address,
-      'contactPhone': contactPhone,
-      'registrationNumber': registrationNumber,
-      'logoBytes': logoBytes,
-    };
+  static Future<OrgHeaderData> _getOrgHeader() async {
+    return PdfBrandingHeader.loadOrgHeader();
   }
 
   /// Builds a unified, multi-page A4 report PDF Document with standard Kannada & English fonts
@@ -76,31 +40,31 @@ class PdfReportService {
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
-                  if (org['logoBytes'] != null)
+                  if (org.logoBytes != null)
                     pw.Container(
                       width: 48,
                       height: 48,
                       margin: const pw.EdgeInsets.only(right: 12),
-                      child: pw.Image(pw.MemoryImage(org['logoBytes'] as Uint8List)),
+                      child: pw.Image(pw.MemoryImage(org.logoBytes!)),
                     ),
                   pw.Expanded(
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          org['name'] as String,
+                          org.name,
                           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          org['address'] as String,
+                          org.address,
                           style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
                         ),
-                        if ((org['contactPhone'] as String).isNotEmpty || org['registrationNumber'] != null)
+                        if (org.contactPhone.isNotEmpty || (org.registrationNumber != null && org.registrationNumber!.isNotEmpty))
                           pw.Text(
                             [
-                              if ((org['contactPhone'] as String).isNotEmpty) 'Mobile: ${org['contactPhone']}',
-                              if (org['registrationNumber'] != null) 'Reg. No: ${org['registrationNumber']}',
+                              if (org.contactPhone.isNotEmpty) 'Mobile: ${org.contactPhone}',
+                              if (org.registrationNumber != null && org.registrationNumber!.isNotEmpty) 'Reg. No: ${org.registrationNumber}',
                             ].join(' • '),
                             style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700),
                           ),
@@ -145,7 +109,7 @@ class PdfReportService {
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(top: 10),
             child: pw.Text(
-              '${org['name']} • Official Offline Digital Record',
+              '${org.name} • Official Offline Digital Record',
               style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
             ),
           );

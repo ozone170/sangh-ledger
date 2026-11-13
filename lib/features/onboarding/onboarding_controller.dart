@@ -139,6 +139,9 @@ class OnboardingNotifier extends StateNotifier<OnboardingDraft> {
     );
 
     await db.transaction((txn) async {
+      // 0. Remove any uninitialized or default dummy organization rows
+      await txn.delete('organizations', where: "is_initialized = 0 OR id = 'org_default_sangh'");
+
       // 1. Create Organization
       await txn.insert('organizations', {
         'id': orgId,

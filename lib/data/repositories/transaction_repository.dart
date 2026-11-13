@@ -70,7 +70,7 @@ class TransactionRepository {
         m.member_code, 
         m.full_name as member_name
       FROM transactions t
-      JOIN members m ON t.member_id = m.id
+      LEFT JOIN members m ON t.member_id = m.id
       WHERE 1=1
     ''';
     var args = <dynamic>[];
@@ -102,10 +102,10 @@ class TransactionRepository {
     return results.map((row) {
       return TransactionItem(
         id: row['id'] as String,
-        organizationId: row['organization_id'] as String,
-        memberId: row['member_id'] as String,
-        memberCode: row['member_code'] as String,
-        memberName: row['member_name'] as String,
+        organizationId: (row['organization_id'] as String?) ?? '',
+        memberId: (row['member_id'] as String?) ?? '',
+        memberCode: (row['member_code'] as String?) ?? 'N/A',
+        memberName: (row['member_name'] as String?) ?? 'Sangh General',
         transactionType: row['transaction_type'] as String,
         paymentMode: row['payment_mode'] as String,
         amountPaise: row['amount_paise'] as int,
@@ -127,7 +127,7 @@ class TransactionRepository {
         m.member_code, 
         m.full_name as member_name
       FROM transactions t
-      JOIN members m ON t.member_id = m.id
+      LEFT JOIN members m ON t.member_id = m.id
       WHERE t.receipt_number = ?
       LIMIT 1
     ''', [receiptNumber]);
@@ -136,10 +136,10 @@ class TransactionRepository {
     final row = results.first;
     return TransactionItem(
       id: row['id'] as String,
-      organizationId: row['organization_id'] as String,
-      memberId: row['member_id'] as String,
-      memberCode: row['member_code'] as String,
-      memberName: row['member_name'] as String,
+      organizationId: (row['organization_id'] as String?) ?? '',
+      memberId: (row['member_id'] as String?) ?? '',
+      memberCode: (row['member_code'] as String?) ?? 'N/A',
+      memberName: (row['member_name'] as String?) ?? 'Sangh General',
       transactionType: row['transaction_type'] as String,
       paymentMode: row['payment_mode'] as String,
       amountPaise: row['amount_paise'] as int,

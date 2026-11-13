@@ -37,9 +37,12 @@ class LoginScreen extends ConsumerWidget {
 
     final logoPath = org?.logoPath;
     final hasCustomLogo = logoPath != null && logoPath.isNotEmpty && File(logoPath).existsSync();
-    final displayName = org?.name != null && org!.name.isNotEmpty
-        ? (org.name.endsWith('Ledger') || org.name.contains('ಸಂಘ') ? org.name : '${org.name} Ledger')
-        : l10n.appTitle;
+    final rawName = (org?.name ?? '').trim();
+    final displayName = rawName.isEmpty
+        ? l10n.appTitle
+        : (rawName.toLowerCase().endsWith('ledger') || rawName.contains('ಲೆಡ್ಜರ್')
+            ? rawName
+            : '$rawName Ledger');
 
     return Scaffold(
       appBar: AppBar(

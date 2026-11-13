@@ -1,3 +1,4 @@
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../domain/services/accounting_engine.dart';
@@ -38,8 +39,9 @@ class RepaymentRepository {
     required String loanId,
     required DateTime paymentDate,
     required int paymentAmountPaise,
+    DatabaseExecutor? executor,
   }) async {
-    final db = await _db.database;
+    final db = executor ?? await _db.database;
 
     final loanResults = await db.query('loans', where: 'id = ?', whereArgs: [loanId], limit: 1);
     if (loanResults.isEmpty) throw StateError('Loan not found');
@@ -163,11 +165,12 @@ class RepaymentRepository {
       final memberId = loan['member_id'] as String;
       final orgId = loan['organization_id'] as String;
 
-      // 2. Compute allocation
+      // 2. Compute allocation safely using the transaction executor
       final preview = await previewAllocation(
         loanId: loanId,
         paymentDate: paymentDate,
         paymentAmountPaise: amountPaise,
+        executor: txn,
       );
 
       final transactionId = uuid.v4();

@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../core/database/app_database.dart';
 
 class OrganizationInfo {
@@ -47,9 +50,33 @@ class OrganizationRepository {
   Future<OrganizationInfo?> getOrganization() async {
     try {
       final db = await _db.database;
-      final results = await db.query('organizations', limit: 1);
+      final results = await db.query(
+        'organizations',
+        orderBy: 'is_initialized DESC, updated_at DESC, created_at DESC',
+        limit: 1,
+      );
       if (results.isNotEmpty) {
-        return OrganizationInfo.fromMap(results.first);
+        var org = OrganizationInfo.fromMap(results.first);
+        if (org.logoPath == null || !File(org.logoPath!).existsSync()) {
+          try {
+            final docDir = await getApplicationDocumentsDirectory();
+            final defaultLogo = File(p.join(docDir.path, 'sangh_logo.png'));
+            if (defaultLogo.existsSync()) {
+              org = OrganizationInfo(
+                id: org.id,
+                name: org.name,
+                logoPath: defaultLogo.path,
+                address: org.address,
+                contactPhone: org.contactPhone,
+                registrationNumber: org.registrationNumber,
+                financialYearStart: org.financialYearStart,
+                currency: org.currency,
+                monthlyInterestBps: org.monthlyInterestBps,
+              );
+            }
+          } catch (_) {}
+        }
+        return org;
       }
     } catch (_) {}
     return null;
@@ -58,10 +85,20 @@ class OrganizationRepository {
   Future<void> updateLogoPath(String logoPath) async {
     final db = await _db.database;
     final now = DateTime.now().toIso8601String();
-    await db.update(
-      'organizations',
-      {'logo_path': logoPath, 'updated_at': now},
-    );
+    final active = await getOrganization();
+    if (active != null) {
+      await db.update(
+        'organizations',
+        {'logo_path': logoPath, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [active.id],
+      );
+    } else {
+      await db.update(
+        'organizations',
+        {'logo_path': logoPath, 'updated_at': now},
+      );
+    }
   }
 
   Future<void> updateProfile({
@@ -83,7 +120,17 @@ class OrganizationRepository {
     if (logoPath != null) {
       data['logo_path'] = logoPath;
     }
-    await db.update('organizations', data);
+    final active = await getOrganization();
+    if (active != null) {
+      await db.update(
+        'organizations',
+        data,
+        where: 'id = ?',
+        whereArgs: [active.id],
+      );
+    } else {
+      await db.update('organizations', data);
+    }
   }
 }
 

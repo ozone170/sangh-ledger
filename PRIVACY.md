@@ -100,7 +100,7 @@ We may update this Privacy Policy from time to time. Any updates will be reflect
 If you have questions, feedback, or concerns regarding this Privacy Policy or Sangh Ledger's data practices, please contact:
 
 - **Developer:** OZONE
-- **Contact Person:** Adithya / OZONE Team
+- **Contact Person:** Aditya / OZONE Team
 - **Email:** [ozoneadi170@gmail.com](mailto:ozoneadi170@gmail.com)
 - **Repository:** [https://github.com/ozone170/sangh-ledger](https://github.com/ozone170/sangh-ledger)
 - **Application Package:** `in.sanghledger.app`

@@ -102,6 +102,7 @@ void invalidateFinancialProviders(WidgetRef ref, {String? memberId, String? loan
   ref.invalidate(dashboardSummaryProvider);
   ref.invalidate(accountBalancesProvider);
   ref.invalidate(membersListProvider);
+  ref.invalidate(activeMembersProvider);
   ref.invalidate(membersWithBalancesProvider);
   ref.invalidate(loansListProvider);
   ref.invalidate(transactionsListProvider);

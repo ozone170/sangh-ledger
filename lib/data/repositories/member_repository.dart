@@ -140,6 +140,11 @@ class MemberRepository {
     });
   }
 
+  /// Fetches all active members ordered by member_code ASC (for dropdowns)
+  Future<List<Member>> getActiveMembers() async {
+    return getMembers(activeOnly: true);
+  }
+
   /// Fetches members with optional active filter and search query
   Future<List<Member>> getMembers({bool? activeOnly, String? query}) async {
     final db = await _db.database;

@@ -33,3 +33,8 @@ final membersListProvider = FutureProvider<List<Member>>((ref) async {
   );
 });
 
+final activeMembersProvider = FutureProvider<List<Member>>((ref) async {
+  final repo = ref.watch(memberRepositoryProvider);
+  return repo.getActiveMembers();
+});
+

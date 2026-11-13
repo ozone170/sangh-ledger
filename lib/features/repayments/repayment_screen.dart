@@ -116,10 +116,8 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
       final remainingPrincipal = _preview?.remainingPrincipalPaise;
 
       if (!mounted) return;
-      Navigator.of(context).pop();
-
       if (txItem != null) {
-        PostTransactionSuccessDialog.show(
+        await PostTransactionSuccessDialog.show(
           context,
           transaction: txItem,
           memberPhone: member?.phone,
@@ -130,6 +128,10 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Repayment confirmed! Receipt: $rcp'), backgroundColor: AppColors.successGreen),
         );
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (!mounted) return;
