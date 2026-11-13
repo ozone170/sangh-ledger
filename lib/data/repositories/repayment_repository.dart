@@ -68,9 +68,23 @@ class RepaymentRepository {
       limit: 1,
     );
 
-    final fromDate = lastRepayment.isNotEmpty
-        ? DateTime.parse(lastRepayment.first['payment_date'] as String)
-        : DateTime.parse(loan['issue_date'] as String);
+    DateTime fromDate;
+    if (lastRepayment.isNotEmpty) {
+      fromDate = DateTime.parse(lastRepayment.first['payment_date'] as String);
+    } else {
+      final disResult = await db.query(
+        'loan_disbursements',
+        where: 'loan_id = ?',
+        whereArgs: [loanId],
+        orderBy: 'disbursement_date DESC',
+        limit: 1,
+      );
+      if (disResult.isNotEmpty && disResult.first['disbursement_date'] != null) {
+        fromDate = DateTime.parse(disResult.first['disbursement_date'] as String);
+      } else {
+        fromDate = DateTime.parse(loan['issue_date'] as String);
+      }
+    }
 
     final elapsedDays = InterestCalculator.calculateElapsedDays(fromDate, paymentDate);
     final newlyAccruedInterest = InterestCalculator.calculateReducingInterestPaise(
@@ -148,7 +162,15 @@ class RepaymentRepository {
 
       final transactionId = uuid.v4();
       final repaymentId = uuid.v4();
-      final receiptNumber = 'REP-$loanCode-${now.millisecondsSinceEpoch % 100000}';
+
+      final prevRepayments = await txn.rawQuery(
+        'SELECT COUNT(*) as count FROM transactions WHERE receipt_number LIKE ? OR receipt_number LIKE ?',
+        ['REP-$loanCode-%', 'RCP-REP-$loanCode-%'],
+      );
+      final repCount = prevRepayments.isNotEmpty
+          ? ((prevRepayments.first['count'] as num?)?.toInt() ?? 0)
+          : 0;
+      final receiptNumber = 'RCP-REP-$loanCode-${(repCount + 1).toString().padLeft(3, '0')}';
 
       // 3. Record transaction
       await txn.insert('transactions', {
@@ -247,5 +269,79 @@ class RepaymentRepository {
 
       return receiptNumber;
     });
+  }
+
+  /// Fetches an immediate calculation summary for a loan as of a specific date,
+  /// including outstanding principal, accrued reducing-balance interest, and total payable.
+  Future<Map<String, dynamic>> getLoanRepaymentSummary(String loanId, [DateTime? asOfDate]) async {
+    final db = await _db.database;
+    final date = asOfDate ?? DateTime.now();
+
+    final loanResults = await db.query('loans', where: 'id = ?', whereArgs: [loanId], limit: 1);
+    if (loanResults.isEmpty) throw StateError('Loan not found');
+    final loan = loanResults.first;
+
+    final principalPaise = loan['principal_paise'] as int;
+    final monthlyBps = loan['monthly_interest_bps'] as int;
+
+    final repResult = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(principal_portion_paise), 0) as paid_principal,
+        COALESCE(SUM(interest_portion_paise), 0) as paid_interest
+      FROM repayments
+      WHERE loan_id = ?
+    ''', [loanId]);
+
+    final totalPaidPrincipal = (repResult.first['paid_principal'] as int?) ?? 0;
+    final totalPaidInterest = (repResult.first['paid_interest'] as int?) ?? 0;
+    final currentOutstandingPrincipal = principalPaise - totalPaidPrincipal;
+
+    final lastRepayment = await db.query(
+      'repayments',
+      where: 'loan_id = ?',
+      whereArgs: [loanId],
+      orderBy: 'payment_date DESC',
+      limit: 1,
+    );
+
+    DateTime fromDate;
+    if (lastRepayment.isNotEmpty) {
+      fromDate = DateTime.parse(lastRepayment.first['payment_date'] as String);
+    } else {
+      final disResult = await db.query(
+        'loan_disbursements',
+        where: 'loan_id = ?',
+        whereArgs: [loanId],
+        orderBy: 'disbursement_date DESC',
+        limit: 1,
+      );
+      if (disResult.isNotEmpty && disResult.first['disbursement_date'] != null) {
+        fromDate = DateTime.parse(disResult.first['disbursement_date'] as String);
+      } else {
+        fromDate = DateTime.parse(loan['issue_date'] as String);
+      }
+    }
+
+    final elapsedDays = InterestCalculator.calculateElapsedDays(fromDate, date);
+    final accruedInterestPaise = InterestCalculator.calculateReducingInterestPaise(
+      principalPaise: currentOutstandingPrincipal,
+      monthlyBps: monthlyBps,
+      days: elapsedDays > 0 ? elapsedDays : 0,
+    );
+
+    final member = await db.query('members', where: 'id = ?', whereArgs: [loan['member_id']], limit: 1);
+
+    return {
+      'loan': loan,
+      'member': member.isNotEmpty ? member.first : null,
+      'principalPaise': principalPaise,
+      'outstandingPrincipalPaise': currentOutstandingPrincipal,
+      'totalPaidPrincipalPaise': totalPaidPrincipal,
+      'totalPaidInterestPaise': totalPaidInterest,
+      'accruedInterestPaise': accruedInterestPaise,
+      'totalOutstandingPaise': currentOutstandingPrincipal + accruedInterestPaise,
+      'elapsedDays': elapsedDays,
+      'monthlyBps': monthlyBps,
+    };
   }
 }

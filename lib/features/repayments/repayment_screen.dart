@@ -13,6 +13,7 @@ import '../../domain/services/accounting_engine.dart';
 import '../../l10n/app_localizations.dart';
 import '../loans/loans_screen.dart';
 import '../transactions/send_message_bottom_sheet.dart';
+import '../transactions/transactions_screen.dart';
 
 final repaymentRepositoryProvider = Provider<RepaymentRepository>((ref) {
   return RepaymentRepository();
@@ -35,11 +36,33 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
   RepaymentAllocation? _preview;
   String? _previewError;
   bool _isSubmitting = false;
+  Map<String, dynamic>? _loanSummary;
+  bool _isLoadingSummary = false;
 
   @override
   void initState() {
     super.initState();
     _selectedLoanId = widget.loanId;
+    if (_selectedLoanId != null) {
+      _loadLoanSummary();
+    }
+  }
+
+  Future<void> _loadLoanSummary() async {
+    if (_selectedLoanId == null) return;
+    setState(() => _isLoadingSummary = true);
+    try {
+      final repo = ref.read(repaymentRepositoryProvider);
+      final summary = await repo.getLoanRepaymentSummary(_selectedLoanId!, _paymentDate);
+      if (mounted) {
+        setState(() {
+          _loanSummary = summary;
+          _isLoadingSummary = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSummary = false);
+    }
   }
 
   Future<void> _updatePreview() async {
@@ -84,6 +107,9 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
       );
 
       invalidateFinancialProviders(ref, loanId: _selectedLoanId);
+      ref.invalidate(loansListProvider);
+      ref.invalidate(dashboardSummaryProvider);
+      ref.invalidate(transactionsListProvider);
 
       final txItem = await TransactionRepository().getTransactionByReceiptNumber(rcp);
       final member = txItem != null ? await MemberRepository().getMemberById(txItem.memberId) : null;
@@ -141,6 +167,7 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
                       .toList(),
                   onChanged: (val) {
                     setState(() => _selectedLoanId = val);
+                    _loadLoanSummary();
                     _updatePreview();
                   },
                 );
@@ -149,11 +176,106 @@ class _RepaymentScreenState extends ConsumerState<RepaymentScreen> {
               error: (_, _) => const Text('Failed to load loans'),
             ),
             const SizedBox(height: 16),
+            if (_isLoadingSummary)
+              const LinearProgressIndicator()
+            else if (_loanSummary != null) ...[
+              Card(
+                color: AppColors.primaryNavy.withValues(alpha: 0.05),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: AppColors.financialTeal, width: 1),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _loanSummary!['member'] != null
+                                ? '${_loanSummary!['member']['full_name']} (${_loanSummary!['member']['member_code']})'
+                                : 'Member',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          Text(
+                            '${((_loanSummary!['monthlyBps'] as int) / 100).toStringAsFixed(1)}% / mo',
+                            style: const TextStyle(color: AppColors.financialTeal, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Principal Due:', style: TextStyle(fontSize: 12)),
+                          Text(
+                            CurrencyFormatter.formatPaise(_loanSummary!['outstandingPrincipalPaise'] as int),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Accrued Interest (${_loanSummary!['elapsedDays']} days):',
+                            style: const TextStyle(fontSize: 12, color: AppColors.warningAmber),
+                          ),
+                          Text(
+                            CurrencyFormatter.formatPaise(_loanSummary!['accruedInterestPaise'] as int),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.warningAmber),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Outstanding Balance:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            CurrencyFormatter.formatPaise(_loanSummary!['totalOutstandingPaise'] as int),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryNavy),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if ((_loanSummary!['accruedInterestPaise'] as int) > 0)
+                    ActionChip(
+                      label: Text('Interest: ${CurrencyFormatter.formatPaise(_loanSummary!['accruedInterestPaise'] as int)}'),
+                      avatar: const Icon(Icons.arrow_downward, size: 16),
+                      onPressed: () {
+                        setState(() => _enteredAmountPaise = _loanSummary!['accruedInterestPaise'] as int);
+                        _updatePreview();
+                      },
+                    ),
+                  ActionChip(
+                    label: Text('Full: ${CurrencyFormatter.formatPaise(_loanSummary!['totalOutstandingPaise'] as int)}'),
+                    avatar: const Icon(Icons.check_circle_outline, size: 16),
+                    onPressed: () {
+                      setState(() => _enteredAmountPaise = _loanSummary!['totalOutstandingPaise'] as int);
+                      _updatePreview();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             DateSelector(
               label: 'Payment Date',
               selectedDate: _paymentDate,
               onDateSelected: (date) {
                 setState(() => _paymentDate = date);
+                _loadLoanSummary();
                 _updatePreview();
               },
             ),

@@ -7,9 +7,13 @@ import '../../core/ui/buttons.dart';
 import '../../core/ui/financial_summary_card.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../data/repositories/repayment_repository.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../domain/entities/member.dart';
+import '../../domain/services/receipt_sharing_service.dart';
 import '../../features/loans/loans_screen.dart';
 import '../../l10n/app_localizations.dart';
+import '../transactions/send_message_bottom_sheet.dart';
 import 'members_controller.dart';
 
 final memberDetailProvider = FutureProvider.family<Member?, String>((ref, id) async {
@@ -266,18 +270,51 @@ class MemberDetailScreen extends ConsumerWidget {
                     subtitle: Text(
                       '${t['transaction_date'].toString().split('T').first} • Mode: ${t['payment_mode'].toString().toUpperCase()}',
                     ),
-                    trailing: Text(
-                      '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: isReversed
-                            ? AppColors.textSecondary
-                            : isDeposit
-                                ? AppColors.financialTeal
-                                : AppColors.errorCrimson,
-                        decoration: isReversed ? TextDecoration.lineThrough : null,
-                      ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: isReversed
+                                ? AppColors.textSecondary
+                                : isDeposit
+                                    ? AppColors.financialTeal
+                                    : AppColors.errorCrimson,
+                            decoration: isReversed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF25D366)),
+                          tooltip: 'Send Receipt',
+                          onPressed: () async {
+                            final tx = await TransactionRepository().getTransactionByReceiptNumber(t['receipt_number'] as String);
+                            final currentBal = savingsBalanceAsync.valueOrNull ?? 0;
+                            if (context.mounted && tx != null) {
+                              final msg = ReceiptSharingService.formatSavingsSummaryMessage(
+                                sanghName: 'Sangh Ledger',
+                                memberName: member.fullName,
+                                memberCode: member.memberCode,
+                                receiptNumber: t['receipt_number'] as String,
+                                transactionType: t['transaction_type'] as String,
+                                amountPaise: amountPaise,
+                                date: DateTime.parse(t['transaction_date'] as String),
+                                currentTotalSavingsPaise: currentBal,
+                                remarks: t['remarks'] as String?,
+                              );
+                              SendMessageBottomSheet.show(
+                                context,
+                                transaction: tx,
+                                memberPhone: member.phone,
+                                customInitialMessage: msg,
+                              );
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -340,7 +377,53 @@ class MemberDetailScreen extends ConsumerWidget {
                     ),
                     title: Text(loan.loanCode, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text('Status: ${loan.status} • Principal: ${CurrencyFormatter.formatPaise(loan.principalPaise)}'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (loan.status != 'Draft')
+                          IconButton(
+                            icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF25D366)),
+                            tooltip: 'Send Loan Statement',
+                            onPressed: () async {
+                              final summary = await RepaymentRepository().getLoanRepaymentSummary(loan.id);
+                              final dummyTx = TransactionItem(
+                                id: loan.id,
+                                organizationId: loan.organizationId,
+                                memberId: loan.memberId,
+                                memberCode: member.memberCode,
+                                memberName: member.fullName,
+                                transactionType: 'loan_summary',
+                                paymentMode: 'cash',
+                                amountPaise: loan.principalPaise,
+                                transactionDate: DateTime.now(),
+                                receiptNumber: loan.loanCode,
+                                isReversed: false,
+                              );
+
+                              final msg = ReceiptSharingService.formatLoanSummaryMessage(
+                                sanghName: 'Sangh Ledger',
+                                memberName: member.fullName,
+                                memberCode: member.memberCode,
+                                loanCode: loan.loanCode,
+                                principalPaise: summary['principalPaise'] as int,
+                                accruedInterestPaise: summary['accruedInterestPaise'] as int,
+                                totalPendingPaise: summary['totalOutstandingPaise'] as int,
+                                monthlyBps: loan.monthlyInterestBps,
+                              );
+
+                              if (context.mounted) {
+                                SendMessageBottomSheet.show(
+                                  context,
+                                  transaction: dummyTx,
+                                  memberPhone: member.phone,
+                                  customInitialMessage: msg,
+                                );
+                              }
+                            },
+                          ),
+                        const Icon(Icons.arrow_forward_ios, size: 16),
+                      ],
+                    ),
                     onTap: () {
                       Navigator.of(context).pushNamed(AppRoutes.loanDetail, arguments: loan.id);
                     },

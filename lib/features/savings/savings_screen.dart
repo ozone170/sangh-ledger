@@ -11,6 +11,7 @@ import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/savings_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/accounting_engine.dart';
+import '../../domain/services/receipt_sharing_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../members/members_controller.dart';
 import '../transactions/send_message_bottom_sheet.dart';
@@ -406,18 +407,57 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                         subtitle: Text(
                           '${act['receipt_number']} • ${act['transaction_date'].toString().split('T').first}',
                         ),
-                        trailing: Text(
-                          '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: isReversed
-                                ? AppColors.textSecondary
-                                : isDeposit
-                                    ? AppColors.financialTeal
-                                    : AppColors.errorCrimson,
-                            decoration: isReversed ? TextDecoration.lineThrough : null,
-                          ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${isDeposit ? '+' : '-'}${CurrencyFormatter.formatPaise(amountPaise)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: isReversed
+                                    ? AppColors.textSecondary
+                                    : isDeposit
+                                        ? AppColors.financialTeal
+                                        : AppColors.errorCrimson,
+                                decoration: isReversed ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF25D366)),
+                              tooltip: 'Send Receipt',
+                              onPressed: () async {
+                                final memberBalances = await MemberRepository().getMembersWithBalances();
+                                final bal = memberBalances
+                                        .where((m) => m.member.id == act['member_id'])
+                                        .map((m) => m.savingsBalancePaise)
+                                        .firstOrNull ??
+                                    0;
+                                final member = await MemberRepository().getMemberById(act['member_id'] as String);
+                                final tx = await TransactionRepository().getTransactionByReceiptNumber(act['receipt_number'] as String);
+                                if (context.mounted && tx != null) {
+                                  final msg = ReceiptSharingService.formatSavingsSummaryMessage(
+                                    sanghName: 'Sangh Ledger',
+                                    memberName: act['member_name'] as String,
+                                    memberCode: act['member_code'] as String,
+                                    receiptNumber: act['receipt_number'] as String,
+                                    transactionType: act['transaction_type'] as String,
+                                    amountPaise: amountPaise,
+                                    date: DateTime.parse(act['transaction_date'] as String),
+                                    currentTotalSavingsPaise: bal,
+                                    remarks: act['remarks'] as String?,
+                                  );
+                                  SendMessageBottomSheet.show(
+                                    context,
+                                    transaction: tx,
+                                    memberPhone: member?.phone,
+                                    customInitialMessage: msg,
+                                  );
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );

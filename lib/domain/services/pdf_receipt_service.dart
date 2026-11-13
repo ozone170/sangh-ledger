@@ -1,29 +1,63 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../core/database/app_database.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
 
 class PdfReceiptService {
   PdfReceiptService._();
 
-  /// Generates a PDF receipt document for any transaction
+  /// Generates a PDF receipt document for any transaction with dynamic organization header & logo
   static Future<Uint8List> generateReceiptPdf({
-    required String sanghName,
-    required String sanghAddress,
+    String sanghName = '',
+    String sanghAddress = '',
     required TransactionItem transaction,
     String? allocationDetails,
     bool isKannada = false,
   }) async {
     final pdf = pw.Document();
 
+    // Dynamically resolve organization details from database if not explicitly supplied
+    String resolvedName = sanghName;
+    String resolvedAddress = sanghAddress;
+    Uint8List? logoBytes;
+
+    try {
+      final db = await AppDatabase().database;
+      final orgResults = await db.query('organizations', limit: 1);
+      if (orgResults.isNotEmpty) {
+        final org = orgResults.first;
+        final name = org['name'] as String?;
+        final addr = org['address'] as String?;
+        final logoPath = org['logo_path'] as String?;
+        if (resolvedName.isEmpty || resolvedName == 'Sangh Ledger') {
+          if (name != null && name.isNotEmpty) resolvedName = name;
+        }
+        if (resolvedAddress.isEmpty || resolvedAddress == 'Karnataka, India') {
+          if (addr != null && addr.isNotEmpty) resolvedAddress = addr;
+        }
+        if (logoPath != null && logoPath.isNotEmpty) {
+          final logoFile = File(logoPath);
+          if (await logoFile.exists()) {
+            logoBytes = await logoFile.readAsBytes();
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (resolvedName.isEmpty) resolvedName = isKannada ? 'ಸಂಘ ಲೆಡ್ಜರ್' : 'Sangh Ledger';
+    if (resolvedAddress.isEmpty) resolvedAddress = 'Karnataka, India';
+
     // Load NotoSansKannada font
     final fontData = await rootBundle.load('assets/fonts/NotoSansKannada-Regular.ttf');
     final kannadaFont = pw.Font.ttf(fontData);
 
     final title = isKannada ? 'ರಸೀದಿ' : 'PAYMENT RECEIPT';
-    final sangh = sanghName.isNotEmpty ? sanghName : (isKannada ? 'ಸಂಘ ಲೆಡ್ಜರ್' : 'Sangh Ledger');
+    final sangh = resolvedName;
+    final address = resolvedAddress;
 
     pdf.addPage(
       pw.Page(
@@ -39,6 +73,15 @@ class PdfReceiptService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
+                if (logoBytes != null)
+                  pw.Center(
+                    child: pw.Container(
+                      margin: const pw.EdgeInsets.only(bottom: 6),
+                      width: 44,
+                      height: 44,
+                      child: pw.Image(pw.MemoryImage(logoBytes)),
+                    ),
+                  ),
                 pw.Center(
                   child: pw.Text(
                     sangh,
@@ -47,7 +90,7 @@ class PdfReceiptService {
                 ),
                 pw.Center(
                   child: pw.Text(
-                    sanghAddress,
+                    address,
                     style: pw.TextStyle(font: kannadaFont, fontSize: 10, color: PdfColors.grey700),
                   ),
                 ),

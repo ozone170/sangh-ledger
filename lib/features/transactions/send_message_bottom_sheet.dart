@@ -12,6 +12,7 @@ class SendMessageBottomSheet extends StatefulWidget {
   final String? memberPhone;
   final String? sanghName;
   final String? sanghAddress;
+  final String? customInitialMessage;
 
   const SendMessageBottomSheet({
     super.key,
@@ -19,6 +20,7 @@ class SendMessageBottomSheet extends StatefulWidget {
     this.memberPhone,
     this.sanghName,
     this.sanghAddress,
+    this.customInitialMessage,
   });
 
   static Future<void> show(
@@ -27,6 +29,7 @@ class SendMessageBottomSheet extends StatefulWidget {
     String? memberPhone,
     String? sanghName,
     String? sanghAddress,
+    String? customInitialMessage,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -39,6 +42,7 @@ class SendMessageBottomSheet extends StatefulWidget {
         memberPhone: memberPhone,
         sanghName: sanghName,
         sanghAddress: sanghAddress,
+        customInitialMessage: customInitialMessage,
       ),
     );
   }
@@ -55,10 +59,11 @@ class _SendMessageBottomSheetState extends State<SendMessageBottomSheet> {
   @override
   void initState() {
     super.initState();
-    final defaultMessage = ReceiptSharingService.formatBilingualReceiptMessage(
-      transaction: widget.transaction,
-      sanghName: widget.sanghName,
-    );
+    final defaultMessage = widget.customInitialMessage ??
+        ReceiptSharingService.formatBilingualReceiptMessage(
+          transaction: widget.transaction,
+          sanghName: widget.sanghName,
+        );
     _messageController = TextEditingController(text: defaultMessage);
     _phoneController = TextEditingController(text: widget.memberPhone ?? '');
   }

@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
+import '../../core/database/app_database.dart';
 import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
 import '../../l10n/app_localizations.dart';
+
+final isAppInitializedProvider = FutureProvider<bool>((ref) async {
+  try {
+    final db = await AppDatabase().database;
+    final orgs = await db.rawQuery('SELECT COUNT(*) as count FROM organizations WHERE is_initialized = 1');
+    final orgCount = Sqflite.firstIntValue(orgs) ?? 0;
+    final admins = await db.rawQuery('SELECT COUNT(*) as count FROM admins');
+    final adminCount = Sqflite.firstIntValue(admins) ?? 0;
+    return orgCount > 0 && adminCount > 0;
+  } catch (_) {
+    return false;
+  }
+});
 
 class LoginScreen extends ConsumerWidget {
   const LoginScreen({super.key});
@@ -13,6 +28,8 @@ class LoginScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final currentLocale = ref.watch(localeProvider);
+    final isInitAsync = ref.watch(isAppInitializedProvider);
+    final isInitialized = isInitAsync.valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -53,13 +70,15 @@ class LoginScreen extends ConsumerWidget {
                   Navigator.of(context).pushReplacementNamed(AppRoutes.mainShell);
                 },
               ),
-              const SizedBox(height: 12),
-              SecondaryButton(
-                text: l10n.firstTimeSetup,
-                onPressed: () {
-                  Navigator.of(context).pushNamed(AppRoutes.onboarding);
-                },
-              ),
+              if (!isInitialized) ...[
+                const SizedBox(height: 12),
+                SecondaryButton(
+                  text: l10n.firstTimeSetup,
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(AppRoutes.onboarding);
+                  },
+                ),
+              ],
             ],
           ),
         ),

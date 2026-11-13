@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/states.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../domain/services/pdf_report_service.dart';
 import '../../domain/services/reports_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -100,35 +101,45 @@ class ReportsScreen extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          _reportTile(context, Icons.people, '1. Member Register', 'All active and inactive registered members'),
-          _reportTile(context, Icons.person, '2. Individual Member Ledger', 'Account statement per member'),
-          _reportTile(context, Icons.savings, '3. Savings Register', 'Total member savings liabilities'),
-          _reportTile(context, Icons.account_balance, '4. Loan Register', 'All issued loans & lifecycle statuses'),
-          _reportTile(context, Icons.trending_up, '5. Outstanding Principal Report', 'Current unpaid principal balances'),
-          _reportTile(context, Icons.alarm, '6. Outstanding Interest Report', 'Accrued reducing-balance interest due'),
-          _reportTile(context, Icons.attach_money, '7. Interest Collected Report', 'All interest income earned & settled'),
-          _reportTile(context, Icons.payment, '8. Repayment Report', 'Historical loan repayments and allocations'),
-          _reportTile(context, Icons.book, '9. Daily Cashbook', 'Daily cash receipts and cash disbursements'),
-          _reportTile(context, Icons.calendar_view_month, '10. Monthly Summary', 'Aggregated monthly financial positions'),
-          _reportTile(context, Icons.balance, '11. Trial Balance', 'Double-entry debit & credit verification'),
-          _reportTile(context, Icons.security, '12. Audit History Report', 'Immutable log of all user & financial actions'),
+          _reportTile(context, ref, 1, Icons.people, '1. Member Register', 'All active and inactive registered members'),
+          _reportTile(context, ref, 2, Icons.person, '2. Individual Member Ledger', 'Account statement per member'),
+          _reportTile(context, ref, 3, Icons.savings, '3. Savings Register', 'Total member savings liabilities'),
+          _reportTile(context, ref, 4, Icons.account_balance, '4. Loan Register', 'All issued loans & lifecycle statuses'),
+          _reportTile(context, ref, 5, Icons.trending_up, '5. Outstanding Principal Report', 'Current unpaid principal balances'),
+          _reportTile(context, ref, 6, Icons.alarm, '6. Outstanding Interest Report', 'Accrued reducing-balance interest due'),
+          _reportTile(context, ref, 7, Icons.attach_money, '7. Interest Collected Report', 'All interest income earned & settled'),
+          _reportTile(context, ref, 8, Icons.payment, '8. Repayment Report', 'Historical loan repayments and allocations'),
+          _reportTile(context, ref, 9, Icons.book, '9. Daily Cashbook', 'Daily cash receipts and cash disbursements'),
+          _reportTile(context, ref, 10, Icons.calendar_view_month, '10. Monthly Summary', 'Aggregated monthly financial positions'),
+          _reportTile(context, ref, 11, Icons.balance, '11. Trial Balance', 'Double-entry debit & credit verification'),
+          _reportTile(context, ref, 12, Icons.security, '12. Audit History Report', 'Immutable log of all user & financial actions'),
         ],
       ),
     );
   }
 
-  Widget _reportTile(BuildContext context, IconData icon, String title, String subtitle) {
+  Widget _reportTile(BuildContext context, WidgetRef ref, int index, IconData icon, String title, String subtitle) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(icon, color: AppColors.primaryNavy),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Opening $title (PDF Export ready)')),
-          );
+        trailing: const Icon(Icons.picture_as_pdf, color: AppColors.financialTeal),
+        onTap: () async {
+          final service = ref.read(reportsServiceProvider);
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Generating PDF for $title...'), duration: const Duration(seconds: 1)),
+            );
+            await PdfReportService.exportReportByIndex(index, service);
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error generating report: $e'), backgroundColor: AppColors.errorCrimson),
+              );
+            }
+          }
         },
       ),
     );

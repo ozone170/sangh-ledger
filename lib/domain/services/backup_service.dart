@@ -65,8 +65,103 @@ class BackupService {
     return Uint8List.fromList(keyBytes);
   }
 
-  /// Creates an encrypted zip backup of the active database
+  /// Returns the dedicated directory for storing Sangh Ledger backups
+  Future<Directory> getBackupDirectory() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final backupDir = Directory(p.join(docsDir.path, 'SanghLedger_Backups'));
+    if (!await backupDir.exists()) {
+      await backupDir.create(recursive: true);
+    }
+    return backupDir;
+  }
+
+  /// Enforces a rolling 2-day retention policy:
+  /// Keeps all backups belonging to the 2 most recent calendar dates found,
+  /// deleting any backups older than those 2 dates.
+  /// Never deletes anything if there are 2 or fewer distinct calendar dates available.
+  Future<List<String>> enforceTwoDayRollingRetention(Directory backupDir) async {
+    if (!await backupDir.exists()) return [];
+
+    final deletedPaths = <String>[];
+    final files = backupDir.listSync().whereType<File>().where((f) {
+      final name = p.basename(f.path);
+      return name.startsWith('SanghLedger_Backup_') && name.endsWith('.zip');
+    }).toList();
+
+    if (files.isEmpty) return [];
+
+    final dateMap = <String, List<File>>{};
+    final regExp = RegExp(r'SanghLedger_Backup_(\d{8})');
+
+    for (final file in files) {
+      final name = p.basename(file.path);
+      final match = regExp.firstMatch(name);
+      String dateKey;
+      if (match != null) {
+        dateKey = match.group(1)!;
+      } else {
+        final mod = file.lastModifiedSync();
+        dateKey = "${mod.year.toString().padLeft(4, '0')}${mod.month.toString().padLeft(2, '0')}${mod.day.toString().padLeft(2, '0')}";
+      }
+      dateMap.putIfAbsent(dateKey, () => []).add(file);
+    }
+
+    final sortedDates = dateMap.keys.toList()..sort((a, b) => b.compareTo(a)); // Descending: newest first
+
+    // If 2 or fewer distinct calendar dates exist, retain all!
+    if (sortedDates.length <= 2) {
+      return [];
+    }
+
+    // Keep top 2 dates, delete older dates
+    final datesToDelete = sortedDates.sublist(2);
+    for (final date in datesToDelete) {
+      final filesToDelete = dateMap[date] ?? [];
+      for (final file in filesToDelete) {
+        try {
+          await file.delete();
+          deletedPaths.add(file.path);
+        } catch (_) {}
+      }
+    }
+
+    return deletedPaths;
+  }
+
+  /// Retrieves metadata of the most recent local backup
+  Future<Map<String, dynamic>?> getLastBackupInfo() async {
+    final backupDir = await getBackupDirectory();
+    final files = backupDir.listSync().whereType<File>().where((f) {
+      final name = p.basename(f.path);
+      return name.startsWith('SanghLedger_Backup_') && name.endsWith('.zip');
+    }).toList();
+
+    if (files.isEmpty) return null;
+
+    files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    final latest = files.first;
+    final stat = latest.statSync();
+
+    return {
+      'path': latest.path,
+      'fileName': p.basename(latest.path),
+      'sizeBytes': stat.size,
+      'modifiedAt': stat.modified,
+    };
+  }
+
+  /// Creates a space-efficient encrypted zip backup of the active database
+  /// with WAL checkpointing, VACUUM compaction, and 2-day rolling retention.
   Future<File> createBackup({required String adminPassword}) async {
+    // 0. Checkpoint WAL and VACUUM SQLite database before archiving for space efficiency
+    try {
+      final db = await _db.database;
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE);');
+      await db.execute('VACUUM;');
+    } catch (_) {
+      // Continue gracefully if vacuum cannot run in active context
+    }
+
     final dbPath = await _db.getDatabasePath();
     final dbFile = File(dbPath);
     if (!await dbFile.exists()) {
@@ -104,22 +199,29 @@ class BackupService {
     final zipData = zipEncoder.encode(archive);
     if (zipData == null) throw StateError('Failed to encode zip archive');
 
-    final backupDir = await getApplicationDocumentsDirectory();
-    final timestamp = now.toIso8601String().replaceAll(':', '').replaceAll('-', '').substring(0, 15);
-    final backupFile = File(p.join(backupDir.path, 'SanghLedger_Backup_$timestamp.zip'));
+    // Store in dedicated SanghLedger_Backups folder
+    final backupDir = await getBackupDirectory();
+    final datePart = "${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+    final timePart = "${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}";
+    final backupFile = File(p.join(backupDir.path, 'SanghLedger_Backup_${datePart}_$timePart.zip'));
     await backupFile.writeAsBytes(zipData);
 
+    // 5. Enforce 2-Day Rolling Retention Policy
+    await enforceTwoDayRollingRetention(backupDir);
+
     // Record into backup history
-    final db = await _db.database;
-    await db.insert('backup_history', {
-      'id': uuid.v4(),
-      'backup_path': backupFile.path,
-      'backup_date': now.toIso8601String(),
-      'checksum_sha256': sha256.convert(zipData).toString(),
-      'is_auto': 0,
-      'status': 'SUCCESS',
-      'created_at': now.toIso8601String(),
-    });
+    try {
+      final db = await _db.database;
+      await db.insert('backup_history', {
+        'id': uuid.v4(),
+        'backup_path': backupFile.path,
+        'backup_date': now.toIso8601String(),
+        'checksum_sha256': sha256.convert(zipData).toString(),
+        'is_auto': 0,
+        'status': 'SUCCESS',
+        'created_at': now.toIso8601String(),
+      });
+    } catch (_) {}
 
     return backupFile;
   }

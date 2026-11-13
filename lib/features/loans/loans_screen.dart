@@ -11,7 +11,9 @@ import '../../data/repositories/loan_repository.dart';
 import '../../domain/entities/loan.dart';
 import '../../domain/services/accounting_engine.dart';
 import '../../data/repositories/member_repository.dart';
+import '../../data/repositories/repayment_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../domain/services/receipt_sharing_service.dart';
 import '../transactions/send_message_bottom_sheet.dart';
 import '../../l10n/app_localizations.dart';
 import '../members/members_controller.dart';
@@ -407,6 +409,47 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.send_rounded, color: Color(0xFF25D366), size: 20),
+                                    tooltip: 'Send Loan Statement',
+                                    onPressed: () async {
+                                      final summary = await RepaymentRepository().getLoanRepaymentSummary(loan.id);
+                                      final member = await MemberRepository().getMemberById(loan.memberId);
+                                      final dummyTx = TransactionItem(
+                                        id: loan.id,
+                                        organizationId: loan.organizationId,
+                                        memberId: loan.memberId,
+                                        memberCode: member?.memberCode ?? '',
+                                        memberName: member?.fullName ?? 'Member',
+                                        transactionType: 'loan_summary',
+                                        paymentMode: 'cash',
+                                        amountPaise: loan.principalPaise,
+                                        transactionDate: DateTime.now(),
+                                        receiptNumber: loan.loanCode,
+                                        isReversed: false,
+                                      );
+
+                                      final msg = ReceiptSharingService.formatLoanSummaryMessage(
+                                        sanghName: 'Sangh Ledger',
+                                        memberName: member?.fullName ?? 'Member',
+                                        memberCode: member?.memberCode ?? '',
+                                        loanCode: loan.loanCode,
+                                        principalPaise: summary['principalPaise'] as int,
+                                        accruedInterestPaise: summary['accruedInterestPaise'] as int,
+                                        totalPendingPaise: summary['totalOutstandingPaise'] as int,
+                                        monthlyBps: loan.monthlyInterestBps,
+                                      );
+
+                                      if (context.mounted) {
+                                        SendMessageBottomSheet.show(
+                                          context,
+                                          transaction: dummyTx,
+                                          memberPhone: member?.phone,
+                                          customInitialMessage: msg,
+                                        );
+                                      }
+                                    },
+                                  ),
                                   IconButton(
                                     icon: const Icon(Icons.payment, color: AppColors.financialTeal),
                                     tooltip: l10n.recordRepayment,

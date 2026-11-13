@@ -1,9 +1,12 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/localization/locale_provider.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/ui/buttons.dart';
+import '../../domain/services/backup_service.dart';
 import '../../l10n/app_localizations.dart';
 import 'onboarding_controller.dart';
 
@@ -19,6 +22,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   late PageController _pageController;
   int _currentStep = 0;
   bool _isCommitting = false;
+  bool _showChoice = true;
 
   // Screen 1 controllers
   late final TextEditingController _sanghNameController;
@@ -42,6 +46,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.initState();
     final draft = ref.read(onboardingProvider);
     _currentStep = draft.currentStep;
+    if (_currentStep > 0 || draft.sanghName.isNotEmpty) {
+      _showChoice = false;
+    }
     _pageController = PageController(initialPage: _currentStep);
 
     _sanghNameController = TextEditingController(text: draft.sanghName);
@@ -138,10 +145,206 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  Future<void> _handleRestoreBackup(BuildContext context) async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+    );
+
+    if (files.isEmpty || files.first.path == null || !context.mounted) return;
+    final backupFile = File(files.first.path!);
+    final passwordController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore Encrypted Backup'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Backup File: ${backupFile.path.split(Platform.pathSeparator).last}'),
+            const SizedBox(height: 12),
+            const Text('Enter the Admin password that was used when creating this backup:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Admin Password *', prefixIcon: Icon(Icons.lock)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (passwordController.text.isNotEmpty) Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Decrypt & Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && passwordController.text.isNotEmpty && context.mounted) {
+      try {
+        await BackupService().restoreBackup(
+          backupZipFile: backupFile,
+          adminPassword: passwordController.text,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Backup restored successfully! Welcome back.'),
+              backgroundColor: AppColors.successGreen,
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed(AppRoutes.mainShell);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Restore failed: $e'), backgroundColor: AppColors.errorCrimson),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final currentLocale = ref.watch(localeProvider);
+
+    if (_showChoice) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(l10n.appTitle),
+          actions: [
+            TextButton(
+              onPressed: () => ref.read(localeProvider.notifier).toggleLocale(),
+              child: Text(
+                currentLocale.languageCode == 'en' ? 'ಕನ್ನಡ' : 'English',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.account_balance, size: 64, color: AppColors.primaryNavy),
+                const SizedBox(height: 16),
+                Text(
+                  'Welcome to Sangh Ledger',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose how you want to set up your financial ledger:',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+
+                // Choice 1: New Setup
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.financialTeal, width: 1.5),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => setState(() => _showChoice = false),
+                    child: const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: AppColors.financialTeal,
+                            foregroundColor: Colors.white,
+                            child: Icon(Icons.add_business_rounded),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'New Sangh Setup / ಹೊಸ ಸಂಘ',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Set up a new organization, admin password, and initial ledger.',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.financialTeal),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Choice 2: Restore from Backup
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _handleRestoreBackup(context),
+                    child: const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: AppColors.primaryNavy,
+                            foregroundColor: Colors.white,
+                            child: Icon(Icons.restore_page_rounded),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Restore from Backup / ಮರುಸ್ಥಾಪಿಸಿ',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Migrating from another phone or reinstalling? Restore from .zip backup.',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primaryNavy),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -151,7 +354,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: _prevStep,
               )
-            : null,
+            : IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => _showChoice = true),
+              ),
         actions: [
           TextButton(
             onPressed: () => ref.read(localeProvider.notifier).toggleLocale(),

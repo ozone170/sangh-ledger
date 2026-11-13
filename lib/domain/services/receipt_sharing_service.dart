@@ -63,6 +63,70 @@ ${transaction.remarks?.isNotEmpty == true ? '📝 *ವಿವರ / Remarks:* ${tr
 '''.trim();
   }
 
+  /// Formats comprehensive bilingual loan status message with total pending balance
+  static String formatLoanSummaryMessage({
+    required String sanghName,
+    required String memberName,
+    required String memberCode,
+    required String loanCode,
+    required int principalPaise,
+    required int accruedInterestPaise,
+    required int totalPendingPaise,
+    required int monthlyBps,
+    String? additionalNotes,
+  }) {
+    final sangh = sanghName.isNotEmpty ? sanghName : 'ಸಂಘ ಲೆಡ್ಜರ್ | Sangh Ledger';
+    final rateStr = '${(monthlyBps / 100).toStringAsFixed(1)}%';
+
+    return '''
+🏛️ *$sangh*
+────────────────────────
+📄 *ಸಾಲದ ವಿವರ / LOAN STATEMENT*
+👤 *ಸದಸ್ಯರು / Member:* $memberName ($memberCode)
+📌 *ಸಾಲ ಸಂಖ್ಯೆ / Loan ID:* $loanCode
+💰 *ಮಂಜೂರಾದ ಅಸಲು / Principal:* ${CurrencyFormatter.formatPaise(principalPaise)}
+📈 *ಬಡ್ಡಿ ದರ / Monthly Rate:* $rateStr / mo (Reducing Balance)
+⏳ *ಬಾಕಿ ಬಡ್ಡಿ / Accrued Interest:* ${CurrencyFormatter.formatPaise(accruedInterestPaise)}
+────────────────────────
+🔴 *ಒಟ್ಟು ಬಾಕಿ ಮೊತ್ತ / Total Payable:* ${CurrencyFormatter.formatPaise(totalPendingPaise)}
+────────────────────────
+${additionalNotes?.isNotEmpty == true ? 'ℹ️ $additionalNotes\n' : ''}✅ ಅಧಿಕೃತ ಡಿಜಿಟಲ್ ಮಾಹಿತಿ / Authorized Record
+'''.trim();
+  }
+
+  /// Formats comprehensive savings transaction receipt including member's current total savings balance
+  static String formatSavingsSummaryMessage({
+    required String sanghName,
+    required String memberName,
+    required String memberCode,
+    required String receiptNumber,
+    required String transactionType,
+    required int amountPaise,
+    required DateTime date,
+    required int currentTotalSavingsPaise,
+    String? remarks,
+  }) {
+    final sangh = sanghName.isNotEmpty ? sanghName : 'ಸಂಘ ಲೆಡ್ಜರ್ | Sangh Ledger';
+    final isDeposit = transactionType.toLowerCase().contains('deposit');
+    final typeKannada = isDeposit ? 'ಉಳಿತಾಯ ಜಮೆ' : 'ಉಳಿತಾಯ ಹಿಂಪಡೆಯುವಿಕೆ';
+    final typeEnglish = isDeposit ? 'Savings Deposit' : 'Savings Withdrawal';
+    final dateStr = date.toIso8601String().split('T').first;
+
+    return '''
+🏛️ *$sangh*
+────────────────────────
+📄 *ರಸೀದಿ ಸಂಖ್ಯೆ / Receipt No:* $receiptNumber
+📅 *ದಿನಾಂಕ / Date:* $dateStr
+👤 *ಸದಸ್ಯರು / Member:* $memberName ($memberCode)
+📌 *ವ್ಯವಹಾರ / Type:* $typeKannada ($typeEnglish)
+💰 *ವ್ಯವಹಾರ ಮೊತ್ತ / Amount:* ${CurrencyFormatter.formatPaise(amountPaise)}
+${remarks?.isNotEmpty == true ? '📝 *ವಿವರ / Remarks:* $remarks\n' : ''}────────────────────────
+🟢 *ಪ್ರಸ್ತುತ ಒಟ್ಟು ಉಳಿತಾಯ / Current Total Savings:* ${CurrencyFormatter.formatPaise(currentTotalSavingsPaise)}
+────────────────────────
+✅ ಅಧಿಕೃತ ಡಿಜಿಟಲ್ ರಸೀದಿ / Authorized Digital Record
+'''.trim();
+  }
+
   /// Sanitizes phone number and prepends India country code (+91) if 10-digits
   static String sanitizePhoneNumber(String phone) {
     final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');

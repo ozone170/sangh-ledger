@@ -173,8 +173,16 @@ class LoanRepository {
         'created_at': now.toIso8601String(),
       });
 
-      // 2. Record transaction
-      final receiptNumber = 'DIS-${loan.loanCode}';
+      // 2. Record transaction with guaranteed unique sequential receipt number
+      final prevDisbursements = await txn.rawQuery(
+        'SELECT COUNT(*) as count FROM transactions WHERE receipt_number LIKE ? OR receipt_number LIKE ?',
+        ['DIS-${loan.loanCode}%', 'RCP-DIS-${loan.loanCode}%'],
+      );
+      final disCount = Sqflite.firstIntValue(prevDisbursements) ?? 0;
+      final receiptNumber = disCount == 0
+          ? 'RCP-DIS-${loan.loanCode}'
+          : 'RCP-DIS-${loan.loanCode}-${disCount + 1}';
+
       await txn.insert('transactions', {
         'id': transactionId,
         'organization_id': loan.organizationId,
