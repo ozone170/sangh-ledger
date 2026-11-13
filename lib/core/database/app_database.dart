@@ -91,10 +91,10 @@ class AppDatabase {
         version: _dbVersion,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON;');
-          await db.execute('PRAGMA busy_timeout = 5000;');
+          await db.rawQuery('PRAGMA busy_timeout = 5000;');
         },
         onOpen: (db) async {
-          await db.execute('PRAGMA busy_timeout = 5000;');
+          await db.rawQuery('PRAGMA busy_timeout = 5000;');
         },
         onCreate: (db, version) async {
           await _createTables(db);
@@ -107,11 +107,17 @@ class AppDatabase {
       );
       return db;
     } catch (e) {
-      // Never silently wipe an existing encrypted DB! Throw explicit error.
+      final errStr = e.toString().toLowerCase();
+      final isKeyOrDecryptionError = errStr.contains('file is not a database') ||
+          errStr.contains('code 26') ||
+          errStr.contains('sqlcipher') ||
+          errStr.contains('not a database') ||
+          errStr.contains('failed to decrypt');
+
       final exists = await File(path).exists();
-      if (exists) {
+      if (exists && isKeyOrDecryptionError) {
         throw StateError(
-          'Failed to open encrypted database with key. '
+          'Failed to open encrypted database with stored key (SQLCipher authentication failure). '
           'Aborting to prevent data loss. Error: $e',
         );
       }

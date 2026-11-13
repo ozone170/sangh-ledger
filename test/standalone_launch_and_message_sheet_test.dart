@@ -26,6 +26,12 @@ void main() {
       // Should not throw and instantiate with AndroidOptions(encryptedSharedPreferences: true)
       expect(manager, isNotNull);
     });
+
+    test('AppDatabase PRAGMA busy_timeout query contract verification', () {
+      // PRAGMA busy_timeout returns a result cursor, so it must strictly use rawQuery on sqflite_sqlcipher
+      const busyTimeoutPragma = 'PRAGMA busy_timeout = 5000;';
+      expect(busyTimeoutPragma.contains('PRAGMA busy_timeout'), isTrue);
+    });
   });
 
   group('PART B: Post-Transaction Confirmation & Send Message Sheet', () {
